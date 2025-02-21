@@ -11,6 +11,14 @@
             background-color: #808080;
         }
 
+        .jspsych-html-button-response-stimulus {
+            color: white !important;
+        }
+
+        .pis-text p {
+            color: white !important;
+        }
+
         .stimulus-container {
             display: flex;
             justify-content: center;
@@ -112,20 +120,6 @@
             }
         });
 
-        // Function to generate the dots stimulus
-        function generateStimulus() {
-            let leftDots = jsPsych.randomization.sampleWithoutReplacement([150, 175], 1)[0];
-            let rightDots = leftDots === 150 ? 175 : 150;
-            return `
-            <div class="stimulus-container">
-                <div class="dot-frame">
-                    ${generateDots(leftDots)}
-                </div>
-                <div class="dot-frame">
-                    ${generateDots(rightDots)}
-                </div>
-            </div>`;
-        }
 
         function generateDots(num) {
             let dots = '';
@@ -136,30 +130,13 @@
             }
             return dots;
         }
-        
+
         const messages = {
 
             PIS: {
                 type: jsPsychHtmlButtonResponse,
                 stimulus: `
-                    <div style="
-                    font-size: 24px; 
-                    font-weight: bold;
-                    text-align: centre;
-                    line-height: 2.2;"
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    height: 100vh; 
-                    flex-direction: column;                
-                    ">
-                    <br><br>Participant Information Sheet <br><br>[placeholder].<br>`,
-                choices: ["I consent"],
-                button_html: '<button style="font-size: 20px; padding: 15px 30px; position: absolute; top: 90%; left: 50%; transform: translate(-50%, -50%);">%choice%</button>',
-            },
-            // Add instructions
-            instructions: {
-                    stimulus: `
+                    <div class="jspych-content" style="color: white;">
                     <div style="
                     font-size: 24px; 
                     font-weight: bold;
@@ -168,24 +145,60 @@
                     display: flex;
                     justify-content: center;
                     align-items: center;
-                    flex-direction: column;
-                    ">                    
-                    <p>Welcome to this experiment! <br>
-                        In this experiment, you will see two boxes with dots. Like this:<br>
-                    </p>
-                    <div id="dot-display"></div>
-                    <p style="margin-top: 20px;">After making your initial confidence rating, you may receive advice.</p>
-                    <p>You will then make a final confidence rating.</p>
-                    <button style="margin-top: 40px; font-size: 20px; padding: 15px 30px;">Start</button>
+                    height: 100vh; 
+                    flex-direction: column;">
+                    <br><br>Participant Information Sheet <br><br>[placeholder].<br>
+                    </div>
                     </div>`,
-                    on_load: function() {
-                    document.getElementById('dot-display').innerHTML = generateStimulus();
-                    document.getElementById('start-button').addEventListener('click', () => jsPsych.finishTrial());
-                }
+                choices: ["I consent"],
+                button_html: '<button style="font-size: 20px; padding: 15px 30px; position: absolute; top: 90%; left: 50%; transform: translate(-50%, -50%);">%choice%</button>',
             },
+
+            instructions: {
+                timeline: [
+                    {
+                        type: jsPsychHtmlButtonResponse,
+                        stimulus: function () {
+                            const slideNumber = jsPsych.timelineVariable('slideNum');
+                            return `
+                                <div style="
+                                    position: absolute;
+                                    top: 0;
+                                    left: 0;
+                                    right: 0;
+                                    bottom: 0;
+                                    display: flex;
+                                    justify-content: center;
+                                    align-items: center;
+                                    background-color: #808080;">
+                                    <img 
+                                        src="instruction-images/Presentation1/Slide${slideNumber}.jpeg" 
+                                        alt="Experiment Instructions" 
+                                        style="
+                                            width: 100%;
+                                            height: 100%;
+                                            object-fit: contain;
+                                        "
+                                    >
+                                </div>`;
+                        },
+                        choices: ["Continue"],
+                        button_html: '<button style="font-size: 20px; padding: 15px 30px; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000;">%choice%</button>',
+                    }
+                ],
+                timeline_variables: [
+                    { slideNum: 1 },
+                    { slideNum: 2 },
+                    { slideNum: 3 },
+                    { slideNum: 4 },
+                    { slideNum: 5 }
+                ]
+            },
+
+
             coverstory: {
                 type: jsPsychHtmlButtonResponse,
-                stimulus: `
+                stimulus: `<div class="jspych-content" style="color: white;">
                     <div style="
                     font-size: 24px; 
                     font-weight: bold;
@@ -200,7 +213,7 @@
                     ">   
                     <p>In this experiment, you will have the opportunity to receive advice... [cover story placeholder]</p>
                     <p>Press the button below to begin.</p>
-                </div> `,
+                </div> </div> `,
                 choices: ['Start']
             },
 
@@ -229,90 +242,11 @@
             type: jsPsychHtmlKeyboardResponse,
             stimulus: () => generateStimulus(),
             choices: "NO_KEYS",
-            trial_duration: 3000,
+            trial_duration: 600,
             data: {
                 task: 'numerosity'
             }
         };
-
-        const customResponse = {
-            type: jsPsychHtmlKeyboardResponse,
-            stimulus: function () {
-                return `
-                    <div class="response-container">
-                        <div class="sliders-wrapper">
-                            <div class="slider-container">
-                                <span>Left</span>
-                                <div id="left-slider" class="custom-slider">
-                                    <div id="left-marker" class="marker"></div>
-                                </div>
-                                <div id="left-value" class="confidence-value">50%</div>
-                            </div>
-                            <div class="slider-container">
-                                <span>Right</span>
-                                <div id="right-slider" class="custom-slider">
-                                    <div id="right-marker" class="marker"></div>
-                                </div>
-                                <div id="right-value" class="confidence-value">50%</div>
-                            </div>
-                        </div>
-                        <button id="continue-button" style="margin-left: 20px;" disabled>Continue</button>
-                    </div>`;
-            },
-            choices: "NO_KEYS",
-            on_load: function () {
-                let selectedValue = null;
-                let selectedSide = null;
-
-                function updateSlider(e, slider, marker, valueDisplay, side, otherMarker, otherValue) {
-                    const rect = slider.getBoundingClientRect();
-                    let pos = (e.clientX - rect.left) / rect.width;
-                    pos = Math.max(0, Math.min(1, pos));
-
-                    // Reset other slider
-                    otherMarker.classList.remove('active');
-                    otherValue.textContent = '50%';
-
-                    // Update current slider
-                    marker.style.left = (pos * 100) + '%';
-                    marker.classList.add('active');
-                    selectedValue = pos * 50 + 50; // Scale to 50-100
-                    valueDisplay.textContent = selectedValue.toFixed(1) + '%';
-                    selectedSide = side;
-
-                    document.getElementById('continue-button').disabled = false;
-                }
-
-                const leftSlider = document.getElementById('left-slider');
-                const rightSlider = document.getElementById('right-slider');
-                const leftMarker = document.getElementById('left-marker');
-                const rightMarker = document.getElementById('right-marker');
-                const leftValue = document.getElementById('left-value');
-                const rightValue = document.getElementById('right-value');
-
-                leftSlider.addEventListener('click', function (e) {
-                    updateSlider(e, leftSlider, leftMarker, leftValue, 'left', rightMarker, rightValue);
-                });
-
-                rightSlider.addEventListener('click', function (e) {
-                    updateSlider(e, rightSlider, rightMarker, rightValue, 'right', leftMarker, leftValue);
-                });
-
-                document.getElementById('continue-button').addEventListener('click', function () {
-                    const data = {
-                        selected_side: selectedSide,
-                        confidence_value: selectedValue,
-                        left_confidence: selectedSide === 'left' ? selectedValue : 50,
-                        right_confidence: selectedSide === 'right' ? selectedValue : 50
-                    };
-                    jsPsych.finishTrial(data);
-                });
-            },
-            data: {
-                task: 'confidence'
-            }
-        };
-
 
 
         // Randomly select advice condition for each trial
@@ -382,67 +316,298 @@
                 task: 'blank_screen'
             }
         };
+        // Add this QUEST class after your initial const declarations and before the timeline setup
 
-        // Modify the custom response to store whether it's first or second rating
-        function createConfidenceResponse(isSecond = false) {
-            const trial = { ...customResponse }; // Clone the original response trial
-            trial.data = {
-                task: isSecond ? 'confidence_second' : 'confidence_first'
-            };
-            return trial;
+        class QuestStaircase {
+            constructor(initialDifference = 150, tGuess = 100, tGuessSd = 50, pThreshold = 0.75, beta = 3.5, delta = 0.01, gamma = 0.5) {
+                this.tGuess = tGuess;  // Initial guess of threshold
+                this.tGuessSd = tGuessSd;  // Standard deviation of initial guess
+                this.pThreshold = pThreshold;  // Target threshold probability
+                this.beta = beta;  // Steepness of psychometric function
+                this.delta = delta;  // Lapse rate
+                this.gamma = gamma;  // Guess rate
+
+                // Initialize pdf array for possible threshold values
+                this.tValues = Array.from({ length: 1000 }, (_, i) => i);
+                this.pdf = this.tValues.map(t =>
+                    Math.exp(-0.5 * Math.pow((t - this.tGuess) / this.tGuessSd, 2))
+                );
+                this.normalizePdf();
+
+                this.trials = [];
+                this.initialDifference = initialDifference;
+                this.currentDifference = initialDifference;
+            }
+
+            getNextDifference() {
+                if (this.trials.length < 3) {
+                    return this.initialDifference;  // Use initial difference for first few trials
+                }
+
+                const mean = this.tValues.reduce((sum, t, i) => sum + t * this.pdf[i], 0);
+                this.currentDifference = Math.round(mean);
+                return this.currentDifference;
+            }
+
+            update(difference, correct) {
+                this.trials.push({ difference, correct });
+
+                const likelihood = this.tValues.map(t =>
+                    this.psychometricFunction(t, difference, correct)
+                );
+
+                this.pdf = this.pdf.map((p, i) => p * likelihood[i]);
+                this.normalizePdf();
+            }
+
+            psychometricFunction(threshold, intensity, correct) {
+                const p = this.gamma + (1 - this.gamma - this.delta) *
+                    (1 - Math.exp(-Math.pow(intensity / threshold, this.beta)));
+                return correct ? p : (1 - p);
+            }
+
+            normalizePdf() {
+                const sum = this.pdf.reduce((a, b) => a + b, 0);
+                this.pdf = this.pdf.map(p => p / sum);
+            }
+
+            getThresholdEstimate() {
+                const mean = this.tValues.reduce((sum, t, i) => sum + t * this.pdf[i], 0);
+                return Math.round(mean);
+            }
         }
+
+        // Initialize QUEST
+        const quest = new QuestStaircase();
+
+        // Modify your generateStimulus function to use QUEST
+        function generateStimulus() {
+            let difference = quest.getNextDifference();
+            let baseNumber = 300;  // Base number
+            let smallerNumber = baseNumber - difference;  // Subtract difference for comparison
+
+            // Randomly assign numbers to sides (50/50 chance)
+            let leftDots, rightDots;
+            if (Math.random() < 0.5) {
+                leftDots = baseNumber;
+                rightDots = smallerNumber;
+            } else {
+                leftDots = smallerNumber;
+                rightDots = baseNumber;
+            }
+            // Store the current dots for later reference
+            jsPsych.data.write({
+                leftDots: leftDots,
+                rightDots: rightDots,
+                difference: difference
+            });
+
+            return `
+            <div class="stimulus-container">
+                <div class="dot-frame">
+                    ${generateDots(leftDots)}
+                </div>
+                <div class="dot-frame">
+                    ${generateDots(rightDots)}
+                </div>
+            </div>`;
+        }
+
+
+        const confidenceResponse = {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: function () {
+                return `
+            <div class="response-container" style="flex-direction: column; gap: 40px;">
+                <div class="sliders-wrapper">
+                    <div class="slider-container">
+                        <span>Left</span>
+                        <div id="left-slider" class="custom-slider">
+                            <div id="left-marker" class="marker"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
+                            <span style="font-size: 12px;">Sure Left</span>
+                            <span style="font-size: 12px;">Guess Left</span>
+                        </div>
+                        <!-- Hidden value container -->
+                        <div id="left-value" class="confidence-value" style="display: none;">50%</div>
+                    </div>
+                    
+                    <div class="slider-container">
+                        <span>Right</span>
+                        <div id="right-slider" class="custom-slider">
+                            <div id="right-marker" class="marker"></div>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
+                            <span style="font-size: 12px;">Guess Right</span>
+                            <span style="font-size: 12px;">Sure Right</span>
+                        </div>
+                        <!-- Hidden value container -->
+                        <div id="right-value" class="confidence-value" style="display: none;">50%</div>
+                    </div>
+                </div>
+                <button id="continue-button" style="padding: 10px 30px; cursor: not-allowed; opacity: 0.6; margin-top: 20px;" disabled>Continue</button>
+            </div>`;
+            },
+            choices: "NO_KEYS",
+            on_load: function () {
+                let selectedValue = null;
+                let selectedSide = null;
+
+                function updateSlider(e, slider, marker, valueDisplay, side, otherMarker, otherValueDisplay) {
+                    const rect = slider.getBoundingClientRect();
+                    let pos = (e.clientX - rect.left) / rect.width;
+                    pos = Math.max(0, Math.min(1, pos));
+
+                    // Calculate confidence value
+                    let confidenceValue;
+                    if (side === 'left') {
+                        // For left slider: 100% at left edge (pos=0), 50% at right edge (pos=1)
+                        confidenceValue = 100 - (pos * 50);
+                    } else {
+                        // For right slider: 50% at left edge (pos=0), 100% at right edge (pos=1)
+                        confidenceValue = pos * 50 + 50;
+                    }
+
+                    // Reset other slider
+                    otherMarker.classList.remove('active');
+                    otherValueDisplay.textContent = '50%';
+
+                    // Update current slider
+                    marker.style.left = (pos * 100) + '%';
+                    marker.classList.add('active');
+                    selectedValue = confidenceValue;
+                    valueDisplay.textContent = selectedValue.toFixed(1) + '%'; // Update hidden value
+                    selectedSide = side;
+
+                    // Enable continue button and update its style
+                    const continueButton = document.getElementById('continue-button');
+                    continueButton.disabled = false;
+                    continueButton.style.opacity = '1';
+                    continueButton.style.cursor = 'pointer';
+                }
+                // event listeners:
+                const leftSlider = document.getElementById('left-slider');
+                const rightSlider = document.getElementById('right-slider');
+                const leftMarker = document.getElementById('left-marker');
+                const rightMarker = document.getElementById('right-marker');
+                const leftValue = document.getElementById('left-value');
+                const rightValue = document.getElementById('right-value');
+
+                leftSlider.addEventListener('click', function (e) {
+                    updateSlider(e, leftSlider, leftMarker, leftValue, 'left', rightMarker, rightValue);
+                });
+
+                rightSlider.addEventListener('click', function (e) {
+                    updateSlider(e, rightSlider, rightMarker, rightValue, 'right', leftMarker, leftValue);
+                });
+
+                document.getElementById('continue-button').addEventListener('click', function () {
+                    const data = {
+                        selected_side: selectedSide,
+                        confidence_value: selectedValue,
+                        left_confidence: selectedSide === 'left' ? selectedValue : 50,
+                        right_confidence: selectedSide === 'right' ? selectedValue : 50
+                    };
+
+                    //Quest Update logic
+                    const lastTrial = jsPsych.data.get().filter({ task: 'numerosity' }).last(1).values()[0];
+                    if (lastTrial) {
+                        const leftDots = lastTrial.leftDots;
+                        const rightDots = lastTrial.rightDots;
+                        const difference = lastTrial.difference;
+
+                        const correct = (selectedSide === 'left' && leftDots > rightDots) ||
+                            (selectedSide === 'right' && rightDots > leftDots);
+
+                        quest.update(difference, correct);
+
+                        console.log(`Confidence was ${selectedValue.toFixed(1)}% ${selectedSide}`);
+                        console.log(`Response was ${correct ? 'correct' : 'incorrect'}`);
+                        console.log(`Current threshold estimate: ${quest.getThresholdEstimate()}`);
+
+                        data.correct = correct;
+                        data.threshold = quest.getThresholdEstimate();
+                    }
+                    
+                    jsPsych.finishTrial({ ...data, correct: correct, threshold: quest.getThresholdEstimate() });
+                });
+            },
+            data: {
+                task: 'confidence'
+            }
+        };
+
 
         // Create the timeline
         const timeline = [];
         timeline.push(messages.PIS);
         timeline.push(messages.instructions);
-        timeline.push(messages.coverstory);
+        //timeline.push(messages.coverstory);
+        // create practice trial procedure:
+        const practiceProcedure = {
+            timeline: [
+                fixation,
+                numerosityTrial,
+                {...confidenceResponse,
+                data: {task:'confidence_first'}
+                },                
+            ]
+        }
+        //insert practice trials.
+        for (let ipractice = 0; ipractice < 10; ipractice++) {
+            timeline.push(practiceProcedure);
+        }
+
         // Create trial procedure
         for (let i = 0; i < 5; i++) {
             const trialProcedure = {
                 timeline: [
                     fixation,
                     numerosityTrial,
-                    createConfidenceResponse(false), // First confidence rating
-                    {
-                        timeline: [
-                            adviceChoice,
-                            {
-                                timeline: [adviceDisplay, actualAdvice],
+                    {...confidenceResponse,
+                        data:{task: 'confidence_first'}
+                    },               
+
+                    // Condition 1: choice for advice
+                    {timeline: [adviceChoice,
+                        //show advice if yes: 
+                            {timeline: [adviceDisplay, actualAdvice],
                                 conditional_function: function () {
                                     const data = jsPsych.data.get().last(1).values()[0];
                                     return data.response === 0; // Only if they chose 'Yes'
                                 }
                             },
-                            {
-                                timeline: [noAdviceDisplay, blankScreen],
+                        // no advice if no:    
+                            {timeline: [noAdviceDisplay, blankScreen],
                                 conditional_function: function () {
                                     const data = jsPsych.data.get().last(1).values()[0];
                                     return data.response === 1; // Only if they chose 'No'
                                 }
                             }
                         ],
-                        conditional_function: function () {
-                            // Condition 1: Show choice
+                        conditional_function: function () {                            
                             return jsPsych.timelineVariable('condition') === 1;
                         }
                     },
-                    {
-                        timeline: [adviceDisplay, actualAdvice],
+                    // Condition 2: Always show advice
+                    {timeline: [adviceDisplay, actualAdvice],
                         conditional_function: function () {
-                            // Condition 2: Always show advice
+                            
                             return jsPsych.timelineVariable('condition') === 2;
                         }
                     },
-                    {
-                        timeline: [noAdviceDisplay, blankScreen],
+                    // Condition 3: No advice available
+                    {timeline: [noAdviceDisplay, blankScreen],
                         conditional_function: function () {
-                            // Condition 3: No advice available
+                            
                             return jsPsych.timelineVariable('condition') === 3;
                         }
                     },
-                    createConfidenceResponse(true) // Second confidence rating
+                    {...confidenceResponse,data:{task: 'confidence_first'} },// Second confidence rating
                 ],
+
+                // randomly select condition 1, 2, or 3.
                 timeline_variables: [{
                     condition: getAdviceCondition()
                 }]
