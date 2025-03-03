@@ -154,164 +154,88 @@
     <script src="https://unpkg.com/@jspsych/plugin-resize@1.0.3"></script>
 
     <script>
-       const jsPsych = initJsPsych({
-            display_element: 'jspsych-experiment',
-            on_finish: function () {
-                console.log("Experiment finished, preparing to save data...");
+        const jsPsych = initJsPsych({
+                display_element: 'jspsych-experiment',
+                on_finish: function () {
+                    // Get all data
+                    const allData = jsPsych.data.get();
+                    const jsonData = allData.json();
 
-                // Get all data
-                const allData = jsPsych.data.get();
-                const jsonData = allData.json();
+                    // Always save to localStorage as backup
+                    localStorage.setItem('numerosity-exp-data', jsonData);
 
-                // Save to localStorage as backup
-                localStorage.setItem('numerosity-exp-data', jsonData);
-                console.log("Data saved to localStorage as backup");
+                    // Detect environment and handle accordingly
+                    if (typeof jatos !== 'undefined') {
+                        console.log("JATOS environment detected");
 
-                // Detect JATOS environment
-                if (typeof jatos !== 'undefined') {
-                    console.log("JATOS environment detected");
+                        // Submit JSON data only - the way it worked before
+                        jatos.submitResultData(jsonData)
+                            .then(() => {
+                                console.log("Data successfully submitted to JATOS");
 
-                    // Create status display element
-                    const statusDiv = document.createElement('div');
-                    statusDiv.style.position = 'fixed';
-                    statusDiv.style.top = '50%';
-                    statusDiv.style.left = '50%';
-                    statusDiv.style.transform = 'translate(-50%, -50%)';
-                    statusDiv.style.backgroundColor = 'rgba(0,0,0,0.8)';
-                    statusDiv.style.color = 'white';
-                    statusDiv.style.padding = '20px';
-                    statusDiv.style.borderRadius = '10px';
-                    statusDiv.style.zIndex = '9999';
-                    statusDiv.style.textAlign = 'center';
-                    statusDiv.innerHTML = '<h2>Saving Data...</h2><p>Please wait while your results are saved.</p>';
-                    document.body.appendChild(statusDiv);
-
-                    console.log("Using callback-based submitResultData instead of promise-based");
-
-                    // Use the callback version instead of the promise version
-                    try {
-                        // Set a timeout to detect if the submission is hanging
-                        const submissionTimeout = setTimeout(function () {
-                            console.log("Submission timed out after 10 seconds");
-                            statusDiv.innerHTML = '<h2>Connection Issue Detected</h2>' +
-                                '<p>The server connection is taking longer than expected.</p>' +
-                                '<p>Your data is saved locally. Please inform the researcher.</p>';
-
-                            // Create a download link for backup
-                            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonData);
-                            const downloadNode = document.createElement('a');
-                            downloadNode.setAttribute("href", dataStr);
-                            downloadNode.setAttribute("download", "numerosity-data-backup.json");
-                            downloadNode.innerHTML = "Download Backup Data";
-                            downloadNode.style.display = "block";
-                            downloadNode.style.margin = "20px auto";
-                            downloadNode.style.textAlign = "center";
-                            downloadNode.style.backgroundColor = "#4CAF50";
-                            downloadNode.style.color = "white";
-                            downloadNode.style.padding = "10px";
-                            downloadNode.style.borderRadius = "5px";
-                            downloadNode.style.textDecoration = "none";
-                            statusDiv.appendChild(downloadNode);
-                        }, 10000);
-
-                        // Old-style callback approach that might work when promises are failing
-                        jatos.submitResultData(jsonData,
-                            function () {
-                                // Success callback
-                                clearTimeout(submissionTimeout);
-                                console.log("Data successfully submitted to JATOS via callback");
-                                statusDiv.innerHTML = '<h2>Success!</h2><p>Your data has been saved to the server.</p>';
+                                // Add completion message
+                                const completionDiv = document.createElement('div');
+                                completionDiv.innerHTML = "<h2>Experiment completed! Your data has been saved.</h2>";
+                                completionDiv.style.textAlign = "center";
+                                completionDiv.style.margin = "50px";
+                                completionDiv.style.color = "white";
+                                document.getElementById('jspsych-experiment').appendChild(completionDiv);
 
                                 // End study after delay
-                                setTimeout(function () {
-                                    statusDiv.innerHTML += '<p>Completing the experiment...</p>';
-                                    try {
-                                        jatos.endStudy();
-                                    } catch (endError) {
-                                        console.error("Error ending study:", endError);
-                                        statusDiv.innerHTML += '<p>You may now close this window.</p>';
-                                    }
-                                }, 3000);
-                            },
-                            function (error) {
-                                // Error callback
-                                clearTimeout(submissionTimeout);
-                                console.error("Failed to submit data to JATOS via callback:", error);
-                                statusDiv.innerHTML = '<h2>Error Saving Data</h2>' +
-                                    '<p>There was an issue saving your data to the server.</p>' +
-                                    '<p>Please use the download button below.</p>';
+                                setTimeout(() => jatos.endStudy(), 3000);
+                            })
+                            .catch((error) => {
+                                console.error("Failed to submit data to JATOS:", error);
+                                // Show download link as backup
+                                const errorDiv = document.createElement('div');
+                                errorDiv.innerHTML = "<h3>There was an issue saving your data to the server.</h3>" +
+                                    "<p>Please download your data using the link below.</p>";
+                                errorDiv.style.color = "red";
+                                errorDiv.style.backgroundColor = "rgba(255,255,255,0.8)";
+                                errorDiv.style.padding = "20px";
+                                errorDiv.style.margin = "20px";
+                                errorDiv.style.borderRadius = "5px";
+                                document.getElementById('jspsych-experiment').appendChild(errorDiv);
 
                                 // Create download link
                                 const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonData);
                                 const downloadNode = document.createElement('a');
                                 downloadNode.setAttribute("href", dataStr);
                                 downloadNode.setAttribute("download", "numerosity-data-backup.json");
-                                downloadNode.innerHTML = "Download Backup Data";
+                                downloadNode.innerHTML = "Download Data";
                                 downloadNode.style.display = "block";
                                 downloadNode.style.margin = "20px auto";
                                 downloadNode.style.textAlign = "center";
-                                downloadNode.style.backgroundColor = "#4CAF50";
-                                downloadNode.style.color = "white";
-                                downloadNode.style.padding = "10px";
-                                downloadNode.style.borderRadius = "5px";
-                                downloadNode.style.textDecoration = "none";
-                                statusDiv.appendChild(downloadNode);
-                            }
-                        );
+                                document.getElementById('jspsych-experiment').appendChild(downloadNode);
+                            });
+                    } else {
+                        // Local environment
+                        console.log("Local environment detected");
 
-                        console.log("submitResultData called with callbacks");
-
-                    } catch (error) {
-                        console.error("Critical error calling submitResultData:", error);
-                        statusDiv.innerHTML = '<h2>Error Saving Data</h2>' +
-                            '<p>There was a critical error attempting to save your data.</p>' +
-                            '<p>Error details: ' + error.message + '</p>' +
-                            '<p>Please use the download button below.</p>';
+                        // Display data for debugging
+                        jsPsych.data.displayData();
 
                         // Create download link
                         const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonData);
                         const downloadNode = document.createElement('a');
                         downloadNode.setAttribute("href", dataStr);
-                        downloadNode.setAttribute("download", "numerosity-data-backup.json");
-                        downloadNode.innerHTML = "Download Backup Data";
+                        downloadNode.setAttribute("download", "numerosity-data.json");
+                        downloadNode.innerHTML = "Download Data";
                         downloadNode.style.display = "block";
                         downloadNode.style.margin = "20px auto";
                         downloadNode.style.textAlign = "center";
-                        downloadNode.style.backgroundColor = "#4CAF50";
-                        downloadNode.style.color = "white";
-                        downloadNode.style.padding = "10px";
-                        downloadNode.style.borderRadius = "5px";
-                        downloadNode.style.textDecoration = "none";
-                        statusDiv.appendChild(downloadNode);
+                        document.getElementById('jspsych-experiment').appendChild(downloadNode);
+
+                        // Add completion message
+                        const completionDiv = document.createElement('div');
+                        completionDiv.innerHTML = "<h2>Experiment completed!</h2><p>Please download your data using the link above.</p>";
+                        completionDiv.style.textAlign = "center";
+                        completionDiv.style.margin = "50px";
+                        completionDiv.style.color = "white";
+                        document.getElementById('jspsych-experiment').appendChild(completionDiv);
                     }
-                } else {
-                    // Local environment - same as before
-                    console.log("Local environment detected");
-
-                    // Display data for debugging
-                    jsPsych.data.displayData();
-
-                    // Create download link
-                    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(jsonData);
-                    const downloadNode = document.createElement('a');
-                    downloadNode.setAttribute("href", dataStr);
-                    downloadNode.setAttribute("download", "numerosity-data.json");
-                    downloadNode.innerHTML = "Download Data";
-                    downloadNode.style.display = "block";
-                    downloadNode.style.margin = "20px auto";
-                    downloadNode.style.textAlign = "center";
-                    document.getElementById('jspsych-experiment').appendChild(downloadNode);
-
-                    // Add completion message
-                    const completionDiv = document.createElement('div');
-                    completionDiv.innerHTML = "<h2>Experiment completed!</h2><p>Please download your data using the link above.</p>";
-                    completionDiv.style.textAlign = "center";
-                    completionDiv.style.margin = "50px";
-                    completionDiv.style.color = "white";
-                    document.getElementById('jspsych-experiment').appendChild(completionDiv);
                 }
-            }
-        });
+            });
         
        
 
