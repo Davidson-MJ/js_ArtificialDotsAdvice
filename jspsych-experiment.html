@@ -163,27 +163,36 @@
 
                 // get all data
                 const allData = jsPsych.data.get();
-                 // Convert to CSV
-                const csvData = allData.csv();
-
+                 // get raw for csv convesion                
                 const jsonData= allData.json(); //store for sanity checks.
+                // create a better CSV file:
+                csvData = convertToFlatCSV(jsonData);
+
 
                 // Always save to localStorage as backup
                 localStorage.setItem('numerosity-exp-data-json', jsonData);
                 localStorage.setItem('numerosity-exp-data-csv', csvData);
                 // Detect environment and handle accordingly
+                
                 if (typeof jatos !== 'undefined') {
                     // JATOS environment (either local or server)
                     console.log("JATOS environment detected");
-                    //submit both:
+                    
                     // Submit both formats to JATOS
                     jatos.submitResultData({
-                                    csv: csvData,
-                        json: allData.json()
+                                    rawData: jsonData,
+                                    csvData: csvData,
                     })
                         .then(() => {
                             console.log("Data successfully submitted to JATOS");
 
+                            // also save a downloadable CSV dile for JATOS admin:
+                            // Also save a downloadable CSV file for JATOS admin
+                             const csvBlob = new Blob([csvData], { type: 'text/csv' });
+                                jatos.uploadResultFile(csvBlob, "numerosity-data.csv")
+                                .then(() => console.log("CSV file uploaded successfully"))
+                                .catch(err => console.error("Error uploading CSV file:", err));
+                        
                             // Add completion message
                             const completionDiv = document.createElement('div');
                             completionDiv.innerHTML = "<h2>Experiment completed! Your data has been saved.</h2>";
@@ -238,7 +247,65 @@
                 }
             } 
         });
-        
+        // Custom function to create a flat CSV from jsPsych JSON data
+        function convertToFlatCSV(jsonData) {
+            try {
+                // Parse JSON if it's a string
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    return "No data available";
+                }
+
+                // Collect all unique keys across all trials
+                const allKeys = new Set();
+                data.forEach(trial => {
+                    Object.keys(trial).forEach(key => {
+                        // Skip some internal jsPsych properties if desired
+                        if (!key.startsWith('internal_') && key !== 'stimulus') {
+                            allKeys.add(key);
+                        }
+                    });
+                });
+
+                // Convert to array and sort for consistent column order
+                const headers = Array.from(allKeys).sort();
+
+                // Create CSV header row
+                let csv = headers.join(',') + '\n';
+
+                // Add data rows
+                data.forEach(trial => {
+                    const row = headers.map(key => {
+                        // Handle missing values
+                        if (!(key in trial)) return '';
+
+                        let value = trial[key];
+
+                        // Handle different data types
+                        if (value === null || value === undefined) {
+                            return '';
+                        } else if (typeof value === 'object') {
+                            // Convert objects to string, escape quotes
+                            return '"' + JSON.stringify(value).replace(/"/g, '""') + '"';
+                        } else if (typeof value === 'string') {
+                            // Escape quotes in strings
+                            return '"' + value.replace(/"/g, '""') + '"';
+                        } else {
+                            // Numbers and booleans
+                            return value;
+                        }
+                    }).join(',');
+
+                    csv += row + '\n';
+                });
+
+                return csv;
+            } catch (e) {
+                console.error("Error creating CSV:", e);
+                return "Error creating CSV: " + e.message;
+            }
+        }
         // Helper function to handle save errors
         function handleSaveError() {
             // Create error message
