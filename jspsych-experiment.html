@@ -165,34 +165,22 @@
                 const allData = jsPsych.data.get();
                  // get raw for csv convesion                
                 const jsonData= allData.json(); //store for sanity checks.
-                // create a better CSV file:
-                csvData = convertToFlatCSV(jsonData);
-
+                
 
                 // Always save to localStorage as backup
                 localStorage.setItem('numerosity-exp-data-json', jsonData);
-                localStorage.setItem('numerosity-exp-data-csv', csvData);
-                // Detect environment and handle accordingly
                 
+                // Detect environment and handle accordingly                
                 if (typeof jatos !== 'undefined') {
                     // JATOS environment (either local or server)
                     console.log("JATOS environment detected");
                     
                     // Submit both formats to JATOS
-                    jatos.submitResultData({
-                                    rawData: jsonData,
-                                    csvData: csvData,
-                    })
+                    jatos.submitResultData(jsonData)                    
                         .then(() => {
                             console.log("Data successfully submitted to JATOS");
 
-                            // also save a downloadable CSV dile for JATOS admin:
-                            // Also save a downloadable CSV file for JATOS admin
-                             const csvBlob = new Blob([csvData], { type: 'text/csv' });
-                                jatos.uploadResultFile(csvBlob, "numerosity-data.csv")
-                                .then(() => console.log("CSV file uploaded successfully"))
-                                .catch(err => console.error("Error uploading CSV file:", err));
-                        
+                            
                             // Add completion message
                             const completionDiv = document.createElement('div');
                             completionDiv.innerHTML = "<h2>Experiment completed! Your data has been saved.</h2>";
