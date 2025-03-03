@@ -140,6 +140,8 @@
             font-size: 14px;
         }
     </style>
+    <!-- add to work with JATOS -->
+    <script src = "jatos.js"></script>
 </head>
 
 <body>
@@ -154,10 +156,127 @@
     <script>
         const jsPsych = initJsPsych({
             display_element: 'jspsych-experiment',
+
+            //different save options based on location:
             on_finish: function () {
-                jsPsych.data.displayData(); // shows raw data at end (useful for debugging.)
-            }
+                // jsPsych.data.displayData(); // shows raw data at end (useful for debugging.)
+
+                // get all data
+                const allData = jsPsych.data.get();
+                 // Convert to CSV
+                const csvData = allData.csv();
+
+                const jsonData= allData.json(); //store for sanity checks.
+
+                // Always save to localStorage as backup
+                localStorage.setItem('numerosity-exp-data-json', jsonData);
+                localStorage.setItem('numerosity-exp-data-csv', csvData);
+                // Detect environment and handle accordingly
+                if (typeof jatos !== 'undefined') {
+                    // JATOS environment (either local or server)
+                    console.log("JATOS environment detected");
+                    //submit both:
+                    // Submit both formats to JATOS
+                    jatos.submitResultData({
+                                    csv: csvData,
+                        json: allData.json()
+                    })
+                        .then(() => {
+                            console.log("Data successfully submitted to JATOS");
+
+                            // Add completion message
+                            const completionDiv = document.createElement('div');
+                            completionDiv.innerHTML = "<h2>Experiment completed! Your data has been saved.</h2>";
+                            completionDiv.style.textAlign = "center";
+                            completionDiv.style.margin = "50px";
+                            completionDiv.style.color = "white";
+                            document.getElementById('jspsych-experiment').appendChild(completionDiv);
+
+                            // End study after delay
+                            setTimeout(() => jatos.endStudy(), 3000);
+                        })
+                        .catch((error) => {
+                            console.error("Failed to submit data to JATOS:", error);
+                            handleSaveError(csvData, allData.json());
+                        });
+                } else {
+                    // Local environment (VS Code Live Preview or direct file access)
+                    console.log("Local environment detected");
+
+                    // Display data for debugging
+                    jsPsych.data.displayData();
+
+                     // Create download link for CSV
+                    const csvDataStr = "data:text/csv;charset=utf-8," + encodeURIComponent(csvData);
+                    const csvDownloadNode = document.createElement('a');
+                    csvDownloadNode.setAttribute("href", csvDataStr);
+                    csvDownloadNode.setAttribute("download", "numerosity-data.csv");
+                    csvDownloadNode.innerHTML = "Download Data (CSV)";
+                    csvDownloadNode.style.display = "block";
+                    csvDownloadNode.style.margin = "20px auto";
+                    csvDownloadNode.style.textAlign = "center";
+                    document.getElementById('jspsych-experiment').appendChild(csvDownloadNode);
+                    
+                     // Also provide JSON option
+                    const jsonDataStr = "data:text/json;charset=utf-8," + encodeURIComponent(allData.json());
+                    const jsonDownloadNode = document.createElement('a');
+                    jsonDownloadNode.setAttribute("href", jsonDataStr);
+                    jsonDownloadNode.setAttribute("download", "numerosity-data.json");
+                    jsonDownloadNode.innerHTML = "Download Data (JSON)";
+                    jsonDownloadNode.style.display = "block";
+                    jsonDownloadNode.style.margin = "20px auto";
+                    jsonDownloadNode.style.textAlign = "center";
+                    document.getElementById('jspsych-experiment').appendChild(jsonDownloadNode);
+                    
+                    // Add completion message
+                    const completionDiv = document.createElement('div');
+                    completionDiv.innerHTML = "<h2>Experiment completed!</h2><p>Since you're running in a local environment, please download your data using the link above.</p>";
+                    completionDiv.style.textAlign = "center";
+                    completionDiv.style.margin = "50px";
+                    completionDiv.style.color = "white";
+                    document.getElementById('jspsych-experiment').appendChild(completionDiv);
+                }
+            } 
         });
+        
+        // Helper function to handle save errors
+        function handleSaveError() {
+            // Create error message
+            const errorDiv = document.createElement('div');
+            errorDiv.innerHTML = "<h3>Warning: There was an issue saving your data to the server.</h3>" +
+                "<p>Your data has been saved locally. Please click the button below to download it and send it to the researcher.</p>";
+            errorDiv.style.color = "red";
+            errorDiv.style.backgroundColor = "rgba(255,255,255,0.8)";
+            errorDiv.style.padding = "20px";
+            errorDiv.style.margin = "20px";
+            errorDiv.style.borderRadius = "5px";
+            document.getElementById('jspsych-experiment').appendChild(errorDiv);
+
+            // Create download link
+            const allData = jsPsych.data.get();
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(allData.json());
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "numerosity-data-backup.json");
+            downloadAnchorNode.innerHTML = "Download Backup Data";
+            downloadAnchorNode.style.display = "block";
+            downloadAnchorNode.style.margin = "20px auto";
+            downloadAnchorNode.style.textAlign = "center";
+            errorDiv.appendChild(downloadAnchorNode);
+        }   
+
+        // create pID
+        const participantId = Date.now() + Math.random().toString(36).substring(2, 15);
+            jsPsych.data.addProperties({
+                participant_id: participantId
+            });
+
+        function saveDataToLocalStorage(data) {
+                const expName = 'numerosity-exp';
+                let savedData = JSON.parse(localStorage.getItem(expName) || '{}');
+                savedData[participantId] = data;
+                localStorage.setItem(expName, JSON.stringify(savedData));
+            }
 
         // shorthand for console.log()
         function debugLog(message) {
@@ -165,9 +284,10 @@
         }
         ////////////
         // set up some fixed variables.
-        let nPracticeTrials=10; //numerosity and first confidence response only (no advice)        
+        let nPracticeTrials=3; //numerosity and first confidence response only (no advice)        
+        let nExpTrials= 3;
         let pixelsPerUnit = 150; // for screen resize calibration (Default until calibrated)
-    
+        
         let dotsDuration= 500; // msec    
         
         let adviceDuration = 800; //msec
@@ -338,15 +458,7 @@
         // Create advice display trials
         const adviceDisplay = {
             type: jsPsychHtmlButtonResponse,
-            stimulus: `
-            <div style="color: white;
-            display: flex; 
-                    justify-content:center;
-                    align-items: center;
-                    color: white;
-                    font-size: ${pixelsPerUnit*200};
-                    font-weight: bold;
-                    ">
+            stimulus: `<div class="experiment-text" style= "font-size: ${24*pixelsPerUnit/150}px;"><div class="experiment-text">
                     You will now receive advice
                     </div>`,
             choices: ['Continue'],
@@ -392,8 +504,11 @@
         };
         const noAdviceDisplay = {
             type: jsPsychHtmlButtonResponse,
-            stimulus: '<div style="color: white;">No advice available</div>',
+            stimulus: `<div class="experiment-text" style= "font-size: ${24*pixelsPerUnit/150}px;">
+                No advice available
+                </div>`,
             choices: ['Continue'],
+            button_html: '<button style="font-size: 20px; padding: 15px 30px; position: absolute; top: 90%; left: 50%; transform: translate(-50%, -50%);">%choice%</button>',
             data: {
                 task: 'no_advice_display'
             }
@@ -638,7 +753,7 @@
                         confidence_value: selectedValue,
                         left_confidence: selectedSide === 'left' ? selectedValue : 50,
                         right_confidence: selectedSide === 'right' ? selectedValue : 50,
-                        reaction_time: rt,
+                        rt: rt,
                         task: 'confidence_first',
                     };
 
@@ -793,7 +908,7 @@
                             confidence_value: selectedValue,
                             left_confidence: selectedSide === 'left' ? selectedValue : 50,
                             right_confidence: selectedSide === 'right' ? selectedValue : 50,
-                            reaction_time: rt,
+                            rt: rt,
                             task: 'confidence_second',
                         };
 
@@ -832,31 +947,30 @@
         // Create the timeline
         const timeline = [];
         
-        timeline.push(messages.PIS);
-        timeline.push(messages.pracInstructions);
-        // timeline.push(screenCalibration);
+        // timeline.push(messages.PIS);
         // timeline.push(messages.pracInstructions);
+        // timeline.push(screenCalibration);
+        
         
         // // timeline.push(verifyCalibration);
         // //timeline.push(messages.coverstory);
         // // create practice trial procedure:
         
-        // // Add a log to make sure we're getting here
+        // Add a log to make sure we're getting here
         // console.log("Adding practice trials to timeline");
-        // var practiceProcedure = {
-        //     timeline: [fixation,numerosityTrial,confidenceResponse_first],            
-        //     randomize_order: false,
-        //     repetitions: nPracticeTrials,
-        // };
-        
-        // timeline.push(practiceProcedure);
+        var practiceProcedure = {
+            timeline: [fixation,numerosityTrial,confidenceResponse_first],            
+            randomize_order: false,
+            repetitions: nPracticeTrials,
+        };        
+        timeline.push(practiceProcedure);
         
         // //  show end of practice / start of advice instructions.
         // timeline.push(messages.coverstory);
         // timeline.push(messages.expInstructions)//
 
         // Create trial procedure
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < nExpTrials; i++) {
             // define the trialProcedure within this for loop, to ensure unique conditions each time. 
             const trialProcedure = {
                 timeline: [
@@ -872,15 +986,15 @@
                             //Y,N has been collecte as [0,1]. Now determine what to show next:
                             // show advice if yes: 
                             {
-                                timeline: [adviceDisplay, actualAdvice],
+                                timeline: [actualAdvice],
                                 conditional_function: function () {
                                     const data = jsPsych.data.get().last(1).values()[0];
                                     return data.response === 0; // Only if they chose 'Yes' [ 0 for LHS]
                                 }
                             },
-                            // no advice if no:    
+                            // no advice/blank screen if no:    
                             {
-                                timeline: [noAdviceDisplay, blankScreen],
+                                timeline: [blankScreen],
                                 conditional_function: function () {
                                     const data = jsPsych.data.get().last(1).values()[0];
                                     return data.response === 1; // Only if they chose 'No' [ 1 for RHS]
