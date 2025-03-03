@@ -157,42 +157,7 @@
 
     const jsPsych = initJsPsych({
         display_element: 'jspsych-experiment',
-        on_finish: function () {
-            // Get all data
-            const allData = jsPsych.data.get();
-            const jsonData = allData.json();
-
-            // Save to localStorage as backup
-            localStorage.setItem('numerosity-exp-data', jsonData);
-
-            // Handle JATOS environment
-            if (typeof jatos !== 'undefined') {
-                // Create standard form for submission (avoids CSP issues)
-                const form = document.createElement('form');
-                form.method = 'POST';
-                form.action = jatos.studyResultUrl + '/resultData';
-                form.style.display = 'none';
-
-                // Create hidden input field with data
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'resultData';
-                input.value = jsonData;
-                form.appendChild(input);
-
-                // Add form to document and submit
-                document.body.appendChild(form);
-                form.submit();
-
-                // Redirect to end page after a delay
-                setTimeout(function () {
-                    window.location.href = jatos.studyUrl + '/end';
-                }, 3000);
-            } else {
-                // Local environment
-                jsPsych.data.displayData();
-            }
-        }
+        on_finish: () => jatos.endStudy(jsPsych.data.get().json())
     });
 
         // create pID
