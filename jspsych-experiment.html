@@ -155,39 +155,10 @@
 
     <script>
 
-    // const jsPsych = initJsPsych({
-    //     display_element: 'jspsych-experiment',
-    //     on_finish: () => jatos.endStudy(jsPsych.data.get().json())
-    // }); // this works as backup
-
-
-        const jsPsych = initJsPsych({
-            display_element: 'jspsych-experiment',
-            on_finish: function () {
-                // Get data in both formats
-                const data = jsPsych.data.get();
-                const jsonData = data.json();
-                const csvData = data.csv();
-
-                // Send to JATOS without promises
-                if (typeof jatos !== 'undefined') {
-                    // First, store the CSV as a file
-                    const csvBlob = new Blob([csvData], { type: 'text/csv' });
-
-                    // Upload CSV file first
-                    jatos.uploadResultFile(csvBlob, "experiment-data.csv");
-
-                    // Short delay to ensure upload starts
-                    setTimeout(function () {
-                        // End study with JSON data
-                        jatos.endStudy(jsonData);
-                    }, 500);
-                } else {
-                    // Local environment only
-                    jsPsych.data.displayData();
-                }
-            }
-        });
+    const jsPsych = initJsPsych({
+        display_element: 'jspsych-experiment',
+        on_finish: () => jatos.endStudy(jsPsych.data.get().json())
+    }); // this works as backup
 
         // create pID
         const participantId = Date.now() + Math.random().toString(36).substring(2, 15);
