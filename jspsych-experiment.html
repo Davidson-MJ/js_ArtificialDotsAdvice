@@ -157,7 +157,7 @@
 
     const jsPsych = initJsPsych({
         display_element: 'jspsych-experiment',
-        on_finish: () => jatos.endStudy(jsPsych.data.get().json())
+        on_finish: () => jatos.endStudy(jsPsych.data.get().csv())
     }); // this works as backup
 
         // create pID
