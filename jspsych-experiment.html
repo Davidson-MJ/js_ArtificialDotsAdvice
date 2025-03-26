@@ -11,7 +11,7 @@
      
      ver 01
      
-     last updated 2025-03-06 MD.
+     last updated 2025-03-21 MD.
      -->
 
     <title>Numerosity Experiment</title>
@@ -224,8 +224,10 @@
 
                                     // Create completion URL for receiving credit
                                     var completion_url = "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=" + pp_id;
-                                    if (pp_id === "DEFAULT_ID") {
+                                                                        
+                                    if (pp_id === "DEFAULT_ID") { //if not SONA, redirect to local URL
                                         completion_url = "http://127.0.0.1:9000/jatos/1/1/results";
+
                                     }
 
                                     // Only redirect after both file upload AND data submission
@@ -241,6 +243,7 @@
                                     }
 
                                     var completion_url = "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=" + pp_id;
+                                    // Redirect to local URL if SONA ID not found
                                     if (pp_id === "DEFAULT_ID") {
                                         completion_url = "http://127.0.0.1:9000/jatos/1/1/results";
                                     }
@@ -303,18 +306,31 @@
 
         ////////////
         // set up some fixed variables.
-        let nPracticeTrials = 5; //numerosity and first confidence response only (dots only)        
-        let nExpTrials = 5; // full sequence, ntrials per block (dots-advice-dots)
-        let nBlocks = 2; // toggle based on exp duration. 
+        let nPracticeTrials = 25; //numerosity and first confidence response only (dots only)        
+        let nExpTrials = 15; // full sequence, ntrials per block (dots-advice-dots) ! make sure divisible by nAdviceConds. to be balanced. (3)
+        let nBlocks = 10; // toggle based on exp duration. 
         let pixelsPerUnit = 150; // for screen resize calibration (Default until calibrated)
 
         let dotsDuration = 500; // msec        
         let adviceDuration = 800; //msec
         let fixDuration = 100; //placeholder, will actually jitter
+        let currentTrialIndex=0; // for below func.
         let itrial=-1; // experiment in trial, stored in data for easy aggregation later. NB this will be -1 during prac, then increment afterwards.
         let iblock= -1;
+
+        // Attention check parameters
+        let attentionCheckFrequency= 0.1; // 10% chance per trial
+        
+        
         ////////////
         // Messages displayed on screen at various points:
+        /// Welcome, 
+        // Participant Information Sheet,
+        //  Debrief, 
+        // Practice Instructions,
+        //  Experiment Instructions
+        //  Attention check
+        ////////////
         const messages = {
             // the participant information sheet (placeholder)
             Welcome: {
@@ -447,6 +463,51 @@
 
         } /// end messages
         
+        // Function to create a block start message
+        function createBlockStartMessage(blockIndex, totalBlocks, trialsPerBlock) {
+            return {
+                type: jsPsychHtmlButtonResponse,
+                stimulus: function () {
+                    return `<div class="experiment-text" style="font-size: ${48 * pixelsPerUnit / 150}px;">
+            <p> Get ready to start Trial 1 of ${trialsPerBlock}, <br> <br>
+                Block : ${blockIndex + 1} of ${totalBlocks} </p>`;
+                },
+                choices: ['Start'],
+                button_html: '<button class="standard-button">%choice%</button>',
+                data: {
+                    task: 'block_message',
+                    block_num: blockIndex + 1
+                },
+                on_finish: function (data) {
+                    //replace stim with simple placeholder
+                    data.stimulus = `block message`;
+                }
+            };
+        }
+        // Attention check trial
+        function createAttentionCheck() {
+            const targetButtonIndex = Math.floor(Math.random() * 3);
+            const buttonLabels = ['Stop', 'Continue', 'Next'];
+            const targetButtonLabel = buttonLabels[targetButtonIndex];
+
+            return {
+                type: jsPsychHtmlButtonResponse,
+                stimulus: `
+                <div style="text-align: center;">
+                    <p>Attention Check: Please select the button labeled "${targetButtonLabel}"</p>
+                </div>
+                    `,
+                choices: ['Stop', 'Continue', 'Next'],
+                on_finish: function (data) {
+
+                    data.attention_check_correct = data.response === targetButtonIndex;
+                    data.stimulus = 'attncheck';
+                    data.task = 'attncheck'
+                    data.target_button = targetButtonLabel;
+                }
+            };
+        }
+
         /////////////////////////////////////////
         // Create survey elements. 
         // - Demographics
@@ -511,7 +572,7 @@
                 { prompt: "I was worried about situations in which I might panic and make a fool of myself", name: 'felt_worry', labels: ["Never", "Sometimes", "Often", "Almost Always"] },
                 { prompt: "I found it difficult to relax", name: 'no_relax', labels: ["Never", "Sometimes", "Often", "Almost Always"] },
                 { prompt: "I couldn't seem to experience any positive feelings at all", name: 'no_positive', labels: ["Never", "Sometimes", "Often", "Almost Always"] },
-                { prompt: "I felt annoyed ny people that criticised my drinking or drug use (if not applicable, mark 'Never')", name: 'felt_annoyed', labels: ["Never", "Sometimes", "Often", "Almost Always"] },
+                { prompt: "I felt annoyed by people that criticised my drinking or drug use (if not applicable, mark 'Never')", name: 'felt_annoyed', labels: ["Never", "Sometimes", "Often", "Almost Always"] },
                 { prompt: "I have thoughts of ending my life", name: 'EOL_thoughts', labels: ["Never", "Sometimes", "Often", "Almost Always"] },
             ],
             randomize_question_order: false,
@@ -719,7 +780,9 @@
         // - fixation
         // - numerosity (dots)
         // - advice options
-        // - confidence sliders
+        // - confidence sliders (first)
+        // - confidence sliders (second)
+        // - end of block message   
         /////////////////////////////////////////
         
         const fixation = {
@@ -776,7 +839,7 @@
         };
 
         // create advice choice display:
-        const adviceChoice = {
+        const adviceChoiceDisplay = {
             type: jsPsychHtmlButtonResponse,
             stimulus: `<div class="experiment-text" style= "font-size: ${48 * pixelsPerUnit / 150}px;">
             Would you like to receive advice?
@@ -800,10 +863,16 @@
             }
         };
 
-        const actualAdvice = {
+        const showAdvice = {
             type: jsPsychHtmlKeyboardResponse,
             stimulus: function () {
-                const direction = getAdviceDirection().toUpperCase();
+                // first determine which side was correct. 
+                const lastTrial = jsPsych.data.get().filter({ task: 'numerosity' }).last(1).values()[0];
+                const correctSide= lastTrial.leftDots >lastTrial.rightDots ? 'LEFT' : 'RIGHT';
+                
+                //get advice with 75% accuracy.
+                const direction = getAdviceDirection(correctSide);
+
                 // Calculate frame size based on screen calibration
                 const frameSize = Math.round((300 * pixelsPerUnit) / 150);
                 const frameGap = Math.round((200 * pixelsPerUnit) / 150);
@@ -833,7 +902,7 @@
                 data.advice_direction = data.stimulus.includes('LEFT') ? 'left' : 'right';
 
                 data.stimulus = `[advice: ${data.advice_direction}]`;
-                data.task= 'actual_advice'
+                data.task= 'show_advice'
                 data.itrial=itrial;
                 data.iblock = iblock;
             }
@@ -854,7 +923,7 @@
                 data.iblock= iblock;
             }
         };
-        const adviceDisplay = {
+        const forcedAdviceDisplay = {
             type: jsPsychHtmlButtonResponse,
             stimulus: `<div class="experiment-text" style= "font-size: ${48 * pixelsPerUnit / 150}px;">
                 Advice available. 
@@ -944,9 +1013,7 @@
                         confidenceValue = pos * 50 + 50;
                     }
 
-                    // Reset other slider
-                    otherMarker.classList.remove('active');
-                    otherValueDisplay.textContent = '50%';
+                
 
                     // Update current slider
                     marker.style.left = (pos * 100) + '%';
@@ -1097,7 +1164,34 @@
                 let selectedSide = previousConfidence.selected_side;
                 const startTime = performance.now();
 
-                function updateSlider(e, slider, marker, valueDisplay, side, otherMarker, otherValueDisplay) {
+
+                //change marker to grey if clicking somewhere (shows the first response) 
+                if (selectedSide === 'left') {
+                    const leftMarker = document.getElementById('left-marker');
+                    leftMarker.style.background = 'grey';
+                    leftMarker.classList.add('active'); //ensures its visible
+                } else if (selectedSide === 'right') {
+                    const rightMarker = document.getElementById('right-marker');
+                    rightMarker.style.background = 'grey';
+                    rightMarker.classList.add('active'); //ensures its visible
+                }
+                //create new green marker for most recent click location:
+                const greenMarker = document.createElement('div');
+                greenMarker.className = 'marker';
+                greenMarker.style.background = 'rgb(17, 236, 13)'; // Green
+                greenMarker.style.id = 'green-marker';
+                //dont append yet, but to correct slider when clicked. 
+
+                //get slider elements: 
+                // Create additional markers for the new response
+                const leftSlider = document.getElementById('left-slider');
+                const rightSlider = document.getElementById('right-slider');
+
+                 // Track current green marker location
+                let currentGreenMarkerParent = null;
+                
+               
+                function updateSlider(e, slider, valueDisplay, side) {
                     const rect = slider.getBoundingClientRect();
                     let pos = (e.clientX - rect.left) / rect.width;
                     pos = Math.max(0, Math.min(1, pos));
@@ -1106,37 +1200,55 @@
                     let confidenceValue;
                     if (side === 'left') {
                         confidenceValue = 100 - (pos * 50);
+                        //hide the other
+                        
                     } else {
                         confidenceValue = pos * 50 + 50;
+                        //hide the other
+                     
                     }
 
-                    // Reset other slider
-                    otherMarker.classList.remove('active');
+                    // If green marker is already attached to a slider, remove it
+                    if (currentGreenMarkerParent) {
+                        try {
+                            currentGreenMarkerParent.removeChild(greenMarker);
+                        } catch (e) {
+                            // Ignore errors if marker isn't a child
+                            console.log("Marker wasn't attached to parent", e);
+                        }
+                    }
 
-                    // Update current slider
-                    marker.style.left = (pos * 100) + '%';
-                    marker.classList.add('active');
+                    // Add green marker to the clicked slider
+                    slider.appendChild(greenMarker);
+                    currentGreenMarkerParent = slider;
+
+                    // Position and show the green marker
+                    greenMarker.style.left = (pos * 100) + '%';
+                    greenMarker.classList.add('active');
+
+                    // Update values
                     selectedValue = confidenceValue;
                     selectedSide = side;
 
-                    // Keep the value hidden but update its text content for data storage
+                    // Keep value hidden but update text content for data storage
                     valueDisplay.textContent = selectedValue.toFixed(1) + '%';
+
+                    // Enable continue button once a selection is made
+                    // document.getElementById('continue-button').disabled = false;
+                    // document.getElementById('continue-button').style.opacity = '1';
+                    // document.getElementById('continue-button').style.cursor = 'pointer';
                 }
 
                 // event listeners:
-                const leftSlider = document.getElementById('left-slider');
-                const rightSlider = document.getElementById('right-slider');
-                const leftMarker = document.getElementById('left-marker');
-                const rightMarker = document.getElementById('right-marker');
                 const leftValue = document.getElementById('left-value');
                 const rightValue = document.getElementById('right-value');
 
                 leftSlider.addEventListener('click', function (e) {
-                    updateSlider(e, leftSlider, leftMarker, leftValue, 'left', rightMarker, rightValue);
+                    updateSlider(e, leftSlider, leftValue, 'left');
                 });
 
                 rightSlider.addEventListener('click', function (e) {
-                    updateSlider(e, rightSlider, rightMarker, rightValue, 'right', leftMarker, leftValue);
+                    updateSlider(e, rightSlider, rightValue, 'right');
                 });
 
                 document.getElementById('continue-button').addEventListener('click', function () {
@@ -1188,6 +1300,7 @@
         // Useful and  needed functions
         ///////////////////////
         // called by fixation:
+
         function getRandomInt(min, max) {
             // to get a random int between min and max inclusive.
             min = Math.ceil(min);
@@ -1213,15 +1326,69 @@
             }
             return dots;
         }
+            // Set up balanced conditions for a block
+        function getBalancedAdviceConditions(numTrials) {
+            // Calculate how many of each condition we need
+            const conditionsPerType = Math.floor(numTrials / 3);
 
-        // called by adviceTrial:
+            // Create an array with equal numbers of each condition
+            let conditions = [];
+
+            // Add condition 1 (conditionsPerType times)
+            for (let i = 0; i < conditionsPerType; i++) {
+                conditions.push(1);
+            }
+
+            // Add condition 2 (conditionsPerType times)
+            for (let i = 0; i < conditionsPerType; i++) {
+                conditions.push(2);
+            }
+
+            // Add condition 3 (conditionsPerType times)
+            for (let i = 0; i < conditionsPerType; i++) {
+                conditions.push(3);
+            }
+
+            // If there are any remaining trials due to division remainder
+            const remaining = numTrials - (conditionsPerType * 3);
+            for (let i = 0; i < remaining; i++) {
+                conditions.push(i + 1); // Add conditions 1, 2, etc. for remaining trials
+            }
+
+            // Shuffle the array
+            conditions = jsPsych.randomization.shuffle(conditions);
+
+            return conditions;
+        }
+        //test: 
+        const adviceConditions = getBalancedAdviceConditions(nExpTrials);
+        debugLog(adviceConditions);
+        
+
+        // called at the start of each block. 
         function getAdviceCondition() {
             //Randomly select advice condition for each trial
-            return jsPsych.randomization.sampleWithoutReplacement([1, 2, 3], 1)[0];
+            const condition = adviceConditions[currentTrialIndex];
+            //increment the trial index
+            currentTrialIndex++;
+            //reset the index if it exceeds the number of trials (shouldnt happen)
+            if (currentTrialIndex >= nExpTrials) {
+                currentTrialIndex = 0;
+                debugLog("Warning! used all predefined trials this block, mismatched.");                
+            }
+            return condition;
         }
+
         // Get random advice direction
-        function getAdviceDirection() {
-            return jsPsych.randomization.sampleWithoutReplacement(['left', 'right'], 1)[0];
+        function getAdviceDirection(correctSide) { // 75% probability of being correct. 
+            const randomValue= Math.random(); // between 0 and 1.
+
+            if (randomValue < 0.75) {
+                return correctSide;
+            } else {
+                return correctSide === 'left' ? 'RIGHT' : 'LEFT';
+            }
+            
         }
 
 
@@ -1229,7 +1396,7 @@
 
         //  QUEST class
         class QuestStaircase {
-            constructor(initialDifference = 150, tGuess = 100, tGuessSd = 50, pThreshold = 0.75, beta = 3.5, delta = 0.01, gamma = 0.5) {
+            constructor(initialDifference = 50, tGuess = 10, tGuessSd = 20, pThreshold = 0.75, beta = 3.5, delta = 0.01, gamma = 0.5) {
                 this.tGuess = tGuess;  // Initial guess of threshold
                 this.tGuessSd = tGuessSd;  // Standard deviation of initial guess
                 this.pThreshold = pThreshold;  // Target threshold probability
@@ -1334,6 +1501,77 @@
             repetitions: nPracticeTrials,
         };
 
+
+        // function to consolidate data into a single row. 
+        
+        let currentCondition = null;
+
+        function consolidateTrialData(iblock, trialInBlock, trialInExp) {
+        return {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: '',
+        choices: "NO_KEYS",
+        trial_duration: 0,
+        on_finish: function(data) {
+        // Retrieve previous trial data
+        const trialData = jsPsych.data.get().filter({ task: 'numerosity' }).last(1).values()[0];
+        const firstConfidenceData = jsPsych.data.get().filter({ task: 'confidence_first' }).last(1).values()[0];
+        const adviceChoiceData = jsPsych.data.get().filter({ task: 'advice_choice' }).last(1).values()[0];
+        const adviceData = jsPsych.data.get().filter({ task: 'show_advice' }).last(1).values()[0];
+        const secondConfidenceData = jsPsych.data.get().filter({ task: 'confidence_second' }).last(1).values()[0];
+
+        // Consolidate data
+        data.block = iblock;
+        data.trial = trialInBlock;
+        data.trialid = trialInExp;
+
+        // Dot information
+        data.dotsLeft = trialData ? trialData.leftDots : null;
+        data.dotsRight = trialData ? trialData.rightDots : null;
+        data.dotsDiff = trialData ? trialData.difference : null;
+
+        // First confidence response
+        data.selectedSide_first = firstConfidenceData ? firstConfidenceData.selected_side : null;
+        data.confidence_first = firstConfidenceData ? firstConfidenceData.confidence_value : null;
+        
+        //retrieve timelinevariable for most recent trial:
+        
+        // Advice condition and choice
+        data.adviceCond = currentCondition;
+        //reset for next trial
+        currentCondition=null;
+        data.adviceChoice = adviceChoiceData ? (adviceChoiceData.response === 0 ? 'yes' : 'no') : 'nan';
+
+        // Advice direction and correctness
+        data.adviceDir = adviceData ? adviceData.advice_direction : 'none';
+
+        // Second confidence response
+        data.selectedSide_second = secondConfidenceData ? secondConfidenceData.selected_side : null;
+        data.confidence_second = secondConfidenceData ? secondConfidenceData.confidence_value : null;
+
+        // Correctness of advice (if applicable)
+        if (adviceData && trialData) {
+        const baseNumber = Math.max(trialData.leftDots, trialData.rightDots);
+        const smallerNumber = Math.min(trialData.leftDots, trialData.rightDots);
+
+        const adviceCorrect = 
+            (adviceData.advice_direction === 'left' && trialData.leftDots > trialData.rightDots) ||
+            (adviceData.advice_direction === 'right' && trialData.rightDots > trialData.leftDots);
+
+        data.adviceCorrect = adviceCorrect ? true : false;
+        } else {
+        data.adviceCorrect = 'nan';
+        }
+
+        // Metadata
+        data.trial_type = "consolidated-trial-data";
+        data.stimulus = "consolidated-trial-data";
+        data.task = "consolidated-trial-data";
+        }
+        };
+        }
+
+
         ////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////
         ////////////////////////////////////////////////////////////
@@ -1351,44 +1589,64 @@
         timeline.push(customCalibration); // screen calibration pre dots.
         timeline.push(practiceProcedure);
 
-        // // //  show end of practice / start of advice instructions.
-        // timeline.push(messages.coverstory); (now in expInstructions slides)
+        // // //  show end of practice / start of advice instructions.    
         timeline.push(messages.expInstructions)//
+        
+        let trialInExp=-1; //will increment to 0 on block 1 trial 1.
 
         for (let iblock = 0; iblock < nBlocks; iblock++) {
 
-            const blockStart = {
-                type: jsPsychHtmlButtonResponse,
-                stimulus: `<div class="experiment-text" style= "font-size: ${48 * pixelsPerUnit / 150}px;">
-                    <p> Get ready to start Trial 1 of ${nExpTrials}, <br> <br>
-                        Block : ${iblock + 1} of ${nBlocks} </p>`,
-                choices: ['Start'],
-                button_html: '<button style="font-size: 20px; padding: 15px 30px; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1000;">%choice%</button>',
-                on_finish: function (data) {
-                    //replace stim with simple placeholder
-                    data.stimulus = `block message`;
-                }
-            };
-            // push block message.
-            timeline.push(blockStart);
+            
+            
+
             // Create trial procedure and populate
+            const adviceConditions = getBalancedAdviceConditions(nExpTrials);
+            let currentTrialIndex = 0; // resets each new block (incremented in getBalancedAdviceConditions)
+
             for (let itrial = 0; itrial < nExpTrials; itrial++) {
                 // define the trialProcedure within this for loop, to ensure unique conditions each time. 
+                trialInExp++;
+
+                // push block message.
+                if (itrial===0 || itrial===4 || itrial===9) {
+                timeline.push(createBlockStartMessage(iblock,nBlocks, nExpTrials));
+                }
+                
+                // Randomly add attention check
+                if (Math.random() <attentionCheckFrequency) {
+                    timeline.push(createAttentionCheck());
+                }
+
                 const trialProcedure = {
+                    // randomly select condition 1, 2, or 3 for Advice.
+                    
+                    timeline_variables: [{
+                        condition: getAdviceCondition() // returns condition from pseudo random mix (balanced numbers per block).
+                    }],
+                    
+                    // when the trial starts, store the current Condition in the global variable for easy consolidation.
+                    on_start: function(){
+                        currentCondition = jsPsych.timelineVariable('condition');
+                    },
                     timeline: [
                         fixation,
                         numerosityTrial,
                         confidenceResponse_first,
-
+                        
                         //
                         // Condition 1: choice for advice
                         // shows choice (Y/N), and then either shows advice, or shows a blank screen.
                         {
-                            timeline: [adviceChoice,
+                            // proceed only if return of conditional function is true.
+                            conditional_function: function () {
+                                return jsPsych.timelineVariable('condition') === 1;
+                            },
+
+                            timeline: [adviceChoiceDisplay,
                                 //Y,N has been collecte as [0,1]. Now determine what to show next:
                                 // show advice if yes: 
                                 {
-                                    timeline: [actualAdvice],
+                                    timeline: [showAdvice],
                                     conditional_function: function () {
                                         const data = jsPsych.data.get().last(1).values()[0];
                                         return data.response === 0; // Only if they chose 'Yes' [ 0 for LHS]
@@ -1403,38 +1661,35 @@
                                     }
                                 }
                             ],
-                            conditional_function: function () {
-                                return jsPsych.timelineVariable('condition') === 1;
-                            }
+                         
                         },
-                        // Condition 2: Always show advice
+                        // Condition 2: forced always show advice
                         {
-                            timeline: [adviceDisplay, actualAdvice],
-                            // timeline: [actualAdvice],
                             conditional_function: function () {
-
                                 return jsPsych.timelineVariable('condition') === 2;
-                            }
+                            },
+
+                            timeline: [forcedAdviceDisplay, showAdvice],
                         },
+
+
                         // Condition 3: No advice available
                         {
-                            timeline: [noAdviceDisplay,blankScreen],
                             conditional_function: function () {
-
                                 return jsPsych.timelineVariable('condition') === 3;
-                            }
+                            },
+                            timeline: [noAdviceDisplay,blankScreen],
                         },
 
                         confidenceResponse_second,
                     ], //end timeline:[fix, numerosity, CR1, ADV,CR2]
 
-                    // randomly select condition 1, 2, or 3 for Advice.
-                    timeline_variables: [{
-                        condition: getAdviceCondition()
-                    }]
+                    
                 };
 
                 timeline.push(trialProcedure);
+
+                timeline.push(consolidateTrialData(iblock, itrial, trialInExp))
             } //trials
         } // blocks
 
