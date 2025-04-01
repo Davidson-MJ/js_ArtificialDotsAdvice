@@ -1494,12 +1494,6 @@
 
         ////////////////////////////////////////////////////////////
        
-        // // create practice trial procedure:    
-        var practiceProcedure = {
-            timeline: [fixation, numerosityTrial, confidenceResponse_first],
-            randomize_order: false,
-            repetitions: nPracticeTrials,
-        };
 
 
         // function to consolidate data into a single row. 
@@ -1587,6 +1581,14 @@
         timeline.push(dass_survey);
         timeline.push(messages.pracInstructions);
         timeline.push(customCalibration); // screen calibration pre dots.
+        
+        // // create practice trial procedure:    
+        var practiceProcedure = {
+            timeline: [fixation, numerosityTrial, confidenceResponse_first],
+            randomize_order: false,
+            repetitions: nPracticeTrials,
+        };
+        
         timeline.push(practiceProcedure);
 
         // // //  show end of practice / start of advice instructions.    
