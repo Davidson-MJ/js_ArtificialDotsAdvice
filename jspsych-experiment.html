@@ -183,6 +183,7 @@
     <script src="https://unpkg.com/@jspsych/plugin-survey-likert@1.1.2"></script>
     <script src="https://unpkg.com/@jspsych/plugin-resize@1.0.3"></script>
     <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.0.0"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-fullscreen@1.1.2"></script>
 
 
     <script>
@@ -299,6 +300,20 @@
             }
         });
 
+        //Add code to reenter fullscreen if it's exited
+        // This approach monitors if fullscreen is exited and prompts to reenter            
+            document.addEventListener('fullscreenchange', function () {
+                if (!document.fullscreenElement && jsPsych.getProgress().current_trial_global > 1) {
+                    // Only show this message if we're past the first couple of trials
+                    alert('You have exited fullscreen mode. Please return to fullscreen for the best experience.');
+
+                    // Re-enter fullscreen
+                    document.documentElement.requestFullscreen().catch(err => {
+                        console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                    });
+                }
+        }); 
+
         // a better function for debugging: shorthand for console.log()
         function debugLog(message) {
             console.log(`[${new Date().toISOString()}] ${message}`);
@@ -306,7 +321,7 @@
 
         ////////////
         // set up some fixed variables.
-        let nPracticeTrials = 25; //numerosity and first confidence response only (dots only)        
+        let nPracticeTrials = 5; //25 numerosity and first confidence response only (dots only)        
         let nExpTrials = 15; // full sequence, ntrials per block (dots-advice-dots) ! make sure divisible by nAdviceConds. to be balanced. (3)
         let nBlocks = 10; // toggle based on exp duration. 
         let pixelsPerUnit = 150; // for screen resize calibration (Default until calibrated)
@@ -418,7 +433,9 @@
                     { slideNum: 2 },
                     { slideNum: 3 },
                     { slideNum: 4 },
-                    { slideNum: 5 }
+                    { slideNum: 5 },
+                    { slideNum: 6 },
+                    { slideNum: 7 }
                 ]
             },
 
@@ -456,13 +473,30 @@
                     { slideNum: 9 },
                     { slideNum: 10 },
                     { slideNum: 11 },
-                    { slideNum: 12 }
+                    { slideNum: 12 },
+                    { slideNum: 13 }
                 ]
             },
            
 
         } /// end messages
-        
+        const enterFullscreen = {
+            type: jsPsychFullscreen,
+            fullscreen_mode: true,
+            message: `<div class="experiment-text" style= "font-size: ${24 * pixelsPerUnit / 150}px;">
+            <p>This experiment will switch to fullscreen mode when you press the button below.</p>
+            <p>Please remain in fullscreen mode for the duration of the experiment.</p>
+            </div>`,
+            button_label: 'Enter Fullscreen',
+            data: { task: 'fullscreen_enter' }
+        };
+        const exitFullscreen = {
+            type: jsPsychFullscreen,
+            fullscreen_mode: false,
+            button_label: 'Exit Fullscreen',
+            data: { task: 'fullscreen_exit' }
+        };
+
         // Function to create a block start message
         function createBlockStartMessage(blockIndex, totalBlocks, trialsPerBlock) {
             return {
@@ -958,44 +992,99 @@
             // slightly specific to make clear which is first and second cr.
             type: jsPsychHtmlKeyboardResponse,
             stimulus: function () {
+                // Create trial counter based on experiment position
+                // First, count all completed trials
+                const allConfidenceTrials = jsPsych.data.get().filter({ task: 'confidence_first' }).count();
+
+                // Determine if we're in practice or main trials
+                // This fixes the issue when itrial stays at -1
+                let counterText;
+
+                if (allConfidenceTrials < nPracticeTrials) {
+                    // Still in practice trials
+                    counterText = `Practice ${allConfidenceTrials + 1}/${nPracticeTrials}`;
+                } else {
+                    // In main trials - calculate current trial and block
+                    const mainTrialsCompleted = allConfidenceTrials - nPracticeTrials;
+                    const currentBlock = Math.floor(mainTrialsCompleted / nExpTrials) + 1;
+                    const currentTrial = (mainTrialsCompleted % nExpTrials) + 1;
+
+                    counterText = `Trial ${currentTrial}/${nExpTrials} (Block ${currentBlock}/${nBlocks})`;
+                }
+    
+
                 return `
             <div class="response-container" style="flex-direction: column; gap: 20px;">
                 <div style= "font-size: ${48 * pixelsPerUnit / 150}px; color: white; text-align: center; margin-bottom: 10px">
                     Which side? </div>
                 <div class="sliders-wrapper">
                     <div class="slider-container">
-                        <span>Left</span>
+                           <span style="font-size: ${24 * pixelsPerUnit / 150}px;"> Left </span>
                         <div id="left-slider" class="custom-slider">
                             <div id="left-marker" class="marker"></div>
                         </div>
                         <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
-                            <span style="font-size: 12px;">Sure Left</span>
-                            <span style="font-size: 12px;">Guess Left</span>
+                             
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Left</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                            </div>
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Left</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                            </div>
                         </div>
                         <!-- Hidden value container -->
                         <div id="left-value" class="confidence-value" style="display: none;">50%</div>
                     </div>
                     
                     <div class="slider-container">
-                        <span>Right</span>
+                           <span style="font-size: ${24 * pixelsPerUnit / 150}px;"> Right </span>
                         <div id="right-slider" class="custom-slider">
                             <div id="right-marker" class="marker"></div>
                         </div>
                         <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
-                            <span style="font-size: 12px;">Guess Right</span>
-                            <span style="font-size: 12px;">Sure Right</span>
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Right</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                            </div>
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Right</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                            </div>                            
                         </div>
                         <!-- Hidden value container -->
                         <div id="right-value" class="confidence-value" style="display: none;">50%</div>
                     </div>
                 </div>
                 <button id="continue-button" style="padding: 10px 30px; cursor: not-allowed; opacity: 0.6; margin-top: 20px;" disabled>Continue</button>
-            </div>`;
+                <!-- Trial counter -->
+                   <div style="
+                    margin-top: 15px;
+                    background-color: rgba(0,0,0,0.5);
+                    color: white;
+                    padding: 5px 10px;
+                    border-radius: 5px;
+                    font-size: 14px;
+                    text-align: center;">
+                    ${counterText}
+                </div>
+                </div>
+                `;
             },
             choices: "NO_KEYS",
             on_load: function () {
                 let selectedValue = null;
                 let selectedSide = null;
+
+                // track marker pos to update if multiple clicks: 
+                let currentMarkerParent=null;
+                let currentActiveMarker=null;
+
                 const startTime = performance.now();
 
                 function updateSlider(e, slider, marker, valueDisplay, side, otherMarker, otherValueDisplay) {
@@ -1013,14 +1102,26 @@
                         confidenceValue = pos * 50 + 50;
                     }
 
-                
+                    // Update other slider and marker
+                    otherMarker.classList.remove('active');
 
                     // Update current slider
                     marker.style.left = (pos * 100) + '%';
                     marker.classList.add('active');
+                    
+                    //updated values
                     selectedValue = confidenceValue;
                     valueDisplay.textContent = selectedValue.toFixed(1) + '%'; // Update hidden value
                     selectedSide = side;
+
+                    // If we previously had a different marker active, remove its active class
+                        if (currentActiveMarker && currentActiveMarker !== marker) {
+                            currentActiveMarker.classList.remove('active');
+                        }
+
+                    // Remember the current active marker
+                    currentActiveMarker = marker;
+
 
                     // Enable continue button and update its style
                     const continueButton = document.getElementById('continue-button');
@@ -1115,6 +1216,7 @@
                     }
                 }
 
+                
                 // Return the complete HTML with proper marker positions
                 return `                        
                  <div class="response-container" style="flex-direction: column; gap: 20px;">
@@ -1123,36 +1225,52 @@
                 </div>
                 <div class="sliders-wrapper">
                     <div class="slider-container" style="min-height: 80px; position: relative;">
-                        <span>Left</span>
+                        <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Left</span>
                         <div id="left-slider" class="custom-slider">
                             <div id="left-marker" class="marker ${selectedSide === 'left' ? 'active' : ''}" 
                                 style="left: ${leftPosition};"></div>
                         </div>
                         <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
-                            <span style="font-size: 12px;">Sure Left</span>
-                            <span style="font-size: 12px;">Guess Left</span>
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Left</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                            </div>
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Left</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                            </div>
                         </div>
                         <!-- Hidden value container with fixed height -->
                         <div id="left-value" class="confidence-value" style="display: none; height: 20px;"></div>
                     </div>
                     
                     <div class="slider-container" style="min-height: 80px; position: relative;">
-                        <span>Right</span>
+                        <span style="font-size: ${24 * pixelsPerUnit / 150}px;"> Right </span>
                         <div id="right-slider" class="custom-slider">
                             <div id="right-marker" class="marker ${selectedSide === 'right' ? 'active' : ''}"
                                 style="left: ${rightPosition};"></div>
                         </div>
                         <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
-                            <span style="font-size: 12px;">Guess Right</span>
-                            <span style="font-size: 12px;">Sure Right</span>
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Right</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                            </div>
+                            <div style= "text-align: center;">
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Right</span>
+                                <br>
+                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                            </div>
                         </div>
                         <!-- Hidden value container with fixed height -->
                         <div id="right-value" class="confidence-value" style="display: none; height: 20px;"></div>
                     </div>
                 </div>
-                <button id="continue-button" style="padding: 10px 30px; cursor: pointer; margin-top: 20px;">Continue</button>
-            </div>
-        `;
+                <button id="continue-button" style="padding: 10px 30px; cursor: pointer; margin-top: 20px;">Continue</button>            
+                </div>                
+            `;
             },
             choices: "NO_KEYS",
             on_load: function () {
@@ -1168,17 +1286,17 @@
                 //change marker to grey if clicking somewhere (shows the first response) 
                 if (selectedSide === 'left') {
                     const leftMarker = document.getElementById('left-marker');
-                    leftMarker.style.background = 'grey';
+                    leftMarker.style.background = 'rgb(17, 186, 13)'; // dull Green
                     leftMarker.classList.add('active'); //ensures its visible
                 } else if (selectedSide === 'right') {
                     const rightMarker = document.getElementById('right-marker');
-                    rightMarker.style.background = 'grey';
+                    rightMarker.style.background = 'rgb(17, 186, 13)'; // dull Green
                     rightMarker.classList.add('active'); //ensures its visible
                 }
                 //create new green marker for most recent click location:
                 const greenMarker = document.createElement('div');
                 greenMarker.className = 'marker';
-                greenMarker.style.background = 'rgb(17, 236, 13)'; // Green
+                greenMarker.style.background = 'rgb(17, 236, 13)'; // bright Green
                 greenMarker.style.id = 'green-marker';
                 //dont append yet, but to correct slider when clicked. 
 
@@ -1371,10 +1489,9 @@
             const condition = adviceConditions[currentTrialIndex];
             //increment the trial index
             currentTrialIndex++;
-            //reset the index if it exceeds the number of trials (shouldnt happen)
+            //reset the index if it exceeds the number of trials 
             if (currentTrialIndex >= nExpTrials) {
                 currentTrialIndex = 0;
-                debugLog("Warning! used all predefined trials this block, mismatched.");                
             }
             return condition;
         }
@@ -1492,6 +1609,7 @@
             return { stimulusHTML, leftDots, rightDots, difference };
         }
 
+
         ////////////////////////////////////////////////////////////
        
 
@@ -1574,7 +1692,7 @@
         // Create the timeline
         const timeline = [];
 
-
+        timeline.push(enterFullscreen);
         timeline.push(messages.Welcome);
         timeline.push(messages.PISdoc);
         timeline.push(demographicsForm);
@@ -1583,13 +1701,21 @@
         timeline.push(customCalibration); // screen calibration pre dots.
         
         // // create practice trial procedure:    
-        var practiceProcedure = {
-            timeline: [fixation, numerosityTrial, confidenceResponse_first],
-            randomize_order: false,
-            repetitions: nPracticeTrials,
-        };
         
-        timeline.push(practiceProcedure);
+        const practiceProcedure = {
+            timeline: [                
+                fixation, 
+                numerosityTrial, 
+                confidenceResponse_first,                     
+            ],            
+        };
+
+        for (let ipractice=0; ipractice< nPracticeTrials; ipractice++){
+            
+            timeline.push(practiceProcedure);
+        }
+
+        
 
         // // //  show end of practice / start of advice instructions.    
         timeline.push(messages.expInstructions)//
@@ -1597,10 +1723,7 @@
         let trialInExp=-1; //will increment to 0 on block 1 trial 1.
 
         for (let iblock = 0; iblock < nBlocks; iblock++) {
-
-            
-            
-
+        
             // Create trial procedure and populate
             const adviceConditions = getBalancedAdviceConditions(nExpTrials);
             let currentTrialIndex = 0; // resets each new block (incremented in getBalancedAdviceConditions)
@@ -1700,6 +1823,7 @@
         timeline.push(doubleSliderTimeline);
         //add debrief? 
         timeline.push(messages.Debriefdoc);
+        timeline.push(exitFullscreen);
 
 
         //launch! 
