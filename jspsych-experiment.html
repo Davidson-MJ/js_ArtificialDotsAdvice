@@ -193,6 +193,18 @@
             display_element: 'jspsych-experiment',
 
             on_finish: function () {
+                
+                //for this experiment we have this completion URL from SONA:
+                //"https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=XXXX//
+                const completion_str= "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=";
+                //we need to get the participnant ID from the URL;
+                //this is done in the JATOS upload function below.
+
+                //note if not in JATOS redirect to the dfeault local URL
+                const default_url= "http://127.0.0.1:9000/jatos/36/43/results";
+                
+                //if in JATOS (not dev mode), store as a file.                
+                // Get the data from jsPsych                
                 const data = jsPsych.data.get();
                 // Generate CSV and JSON data
                 const csvData = data.csv();
@@ -224,10 +236,10 @@
                                     }
 
                                     // Create completion URL for receiving credit
-                                    var completion_url = "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=" + pp_id;
+                                    var completion_url = completion_str + pp_id;
                                                                         
                                     if (pp_id === "DEFAULT_ID") { //if not SONA, redirect to local URL
-                                        completion_url = "http://127.0.0.1:9000/jatos/1/1/results";
+                                        completion_url = default_url;
 
                                     }
 
@@ -243,10 +255,10 @@
                                         pp_id = jatos.urlQueryParameters.SONA_ID;
                                     }
 
-                                    var completion_url = "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=" + pp_id;
+                                    var completion_url =completion_str+ pp_id;
                                     // Redirect to local URL if SONA ID not found
                                     if (pp_id === "DEFAULT_ID") {
-                                        completion_url = "http://127.0.0.1:9000/jatos/1/1/results";
+                                        completion_url = default_url;
                                     }
                                     jatos.endStudyAndRedirect(completion_url);
                                 }
@@ -268,9 +280,9 @@
                                         pp_id = jatos.urlQueryParameters.SONA_ID;
                                     }
 
-                                    var completion_url = "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=" + pp_id;
+                                    var completion_url = completion_str + pp_id;
                                     if (pp_id === "DEFAULT_ID") {
-                                        completion_url = "http://127.0.0.1:9000/jatos/1/1/results";
+                                        completion_url = default_url;
                                     }
                                     jatos.endStudyAndRedirect(completion_url);
                                 },
@@ -283,9 +295,9 @@
                                         pp_id = jatos.urlQueryParameters.SONA_ID;
                                     }
 
-                                    var completion_url = "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experimfent_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=" + pp_id;
+                                    var completion_url = completion_str + pp_id;
                                     if (pp_id === "DEFAULT_ID") {
-                                        completion_url = "http://127.0.0.1:9000/jatos/1/1/results";
+                                        completion_url = default_url;
                                     }
                                     jatos.endStudyAndRedirect(completion_url);
                                 }
@@ -321,9 +333,9 @@
 
         ////////////
         // set up some fixed variables.
-        let nPracticeTrials = 5; //25 numerosity and first confidence response only (dots only)        
-        let nExpTrials = 15; // full sequence, ntrials per block (dots-advice-dots) ! make sure divisible by nAdviceConds. to be balanced. (3)
-        let nBlocks = 10; // toggle based on exp duration. 
+        let nPracticeTrials = 25; //25 numerosity and first confidence response only (dots only)        
+        let nExpTrials = 15; //15  full sequence, ntrials per block (dots-advice-dots) ! make sure divisible by nAdviceConds. to be balanced. (3)
+        let nBlocks = 10; // 10 toggle based on exp duration. 
         let pixelsPerUnit = 150; // for screen resize calibration (Default until calibrated)
 
         let dotsDuration = 500; // msec        
@@ -484,8 +496,8 @@
             type: jsPsychFullscreen,
             fullscreen_mode: true,
             message: `<div class="experiment-text" style= "font-size: ${24 * pixelsPerUnit / 150}px;">
-            <p>This experiment will switch to fullscreen mode when you press the button below.</p>
-            <p>Please remain in fullscreen mode for the duration of the experiment.</p>
+            This experiment will switch to fullscreen mode when you press the button . <br>
+            Please remain in fullscreen mode for the duration of the experiment.
             </div>`,
             button_label: 'Enter Fullscreen',
             data: { task: 'fullscreen_enter' }
@@ -1023,17 +1035,16 @@
                         <div id="left-slider" class="custom-slider">
                             <div id="left-marker" class="marker"></div>
                         </div>
-                        <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
-                             
+                        <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">                             
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Left</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Sure Left</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
                             </div>
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Left</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Guess Left</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
                             </div>
                         </div>
                         <!-- Hidden value container -->
@@ -1047,14 +1058,14 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Right</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Guess Right</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
                             </div>
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Right</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Sure Right</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
                             </div>                            
                         </div>
                         <!-- Hidden value container -->
@@ -1232,14 +1243,14 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Left</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Sure Left</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
                             </div>
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Left</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Guess Left</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
                             </div>
                         </div>
                         <!-- Hidden value container with fixed height -->
@@ -1254,14 +1265,14 @@
                         </div>
                         <div style="display: flex; justify-content: space-between; width: 200px; margin-top: 5px;">
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Guess Right</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Guess Right</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(50%)</span>
                             </div>
                             <div style= "text-align: center;">
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px;">Sure Right</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px;">Sure Right</span>
                                 <br>
-                                <span style="font-size: ${24 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
+                                <span style="font-size: ${20 * pixelsPerUnit / 150}px; color: rgba(255,255,255,0.8);">(100%)</span>
                             </div>
                         </div>
                         <!-- Hidden value container with fixed height -->
@@ -1283,14 +1294,14 @@
                 const startTime = performance.now();
 
 
-                //change marker to grey if clicking somewhere (shows the first response) 
+                //change marker to black if clicking somewhere (shows the first response) 
                 if (selectedSide === 'left') {
                     const leftMarker = document.getElementById('left-marker');
-                    leftMarker.style.background = 'rgb(17, 186, 13)'; // dull Green
+                    leftMarker.style.background = 'black'; //
                     leftMarker.classList.add('active'); //ensures its visible
                 } else if (selectedSide === 'right') {
                     const rightMarker = document.getElementById('right-marker');
-                    rightMarker.style.background = 'rgb(17, 186, 13)'; // dull Green
+                    rightMarker.style.background = 'black'; // 
                     rightMarker.classList.add('active'); //ensures its visible
                 }
                 //create new green marker for most recent click location:
@@ -1645,7 +1656,9 @@
         // First confidence response
         data.selectedSide_first = firstConfidenceData ? firstConfidenceData.selected_side : null;
         data.confidence_first = firstConfidenceData ? firstConfidenceData.confidence_value : null;
-        
+        // correct and reaction times
+        data.correct_1 = firstConfidenceData ? firstConfidenceData.correct : null;
+        data.rt_1 = firstConfidenceData ? firstConfidenceData.rt : null;
         //retrieve timelinevariable for most recent trial:
         
         // Advice condition and choice
@@ -1674,6 +1687,9 @@
         } else {
         data.adviceCorrect = 'nan';
         }
+        // correct and reaction times
+        data.correct_2 = secondConfidenceData ? secondConfidenceData.correct : null;
+        data.rt_2 = secondConfidenceData ? secondConfidenceData.rt : null; 
 
         // Metadata
         data.trial_type = "consolidated-trial-data";
