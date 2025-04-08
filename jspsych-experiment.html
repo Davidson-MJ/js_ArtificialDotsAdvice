@@ -335,12 +335,12 @@
         // set up some fixed variables.
         let nPracticeTrials = 25; //25 numerosity and first confidence response only (dots only)        
         let nExpTrials = 15; //15  full sequence, ntrials per block (dots-advice-dots) ! make sure divisible by nAdviceConds. to be balanced. (3)
-        let nBlocks = 10; // 10 toggle based on exp duration. 
+        let nBlocks = 15; // 10 toggle based on exp duration. 
         let pixelsPerUnit = 150; // for screen resize calibration (Default until calibrated)
 
         let dotsDuration = 500; // msec        
         let adviceDuration = 800; //msec
-        let fixDuration = 100; //placeholder, will actually jitter
+        
         let currentTrialIndex=0; // for below func.
         let itrial=-1; // experiment in trial, stored in data for easy aggregation later. NB this will be -1 during prac, then increment afterwards.
         let iblock= -1;
@@ -493,15 +493,18 @@
 
         } /// end messages
         const enterFullscreen = {
-            type: jsPsychFullscreen,
-            fullscreen_mode: true,
-            message: `<div class="experiment-text" style= "font-size: ${24 * pixelsPerUnit / 150}px;">
-            This experiment will switch to fullscreen mode when you press the button . <br>
-            Please remain in fullscreen mode for the duration of the experiment.
-            </div>`,
-            button_label: 'Enter Fullscreen',
-            data: { task: 'fullscreen_enter' }
-        };
+                type: jsPsychFullscreen,
+                fullscreen_mode: true,
+                message: `<div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 80vh;">
+                    <div class="experiment-text" style="font-size: ${24 * pixelsPerUnit / 150}px; text-align: center; margin-bottom: 30px;">
+                    This experiment will switch to fullscreen mode when you press the button. <br>
+                    Please remain in fullscreen mode for the duration of the experiment.
+                    </div>
+                    </div>`,
+                choices: 'Enter Fullscreen',
+                button_html: '<button class="standard-button">%choice%</button>',
+                data: { task: 'fullscreen_enter' }
+            };
         const exitFullscreen = {
             type: jsPsychFullscreen,
             fullscreen_mode: false,
@@ -592,12 +595,20 @@
         on_finish: function (data) {
             // Log the demographic data
             console.log("Demographics collected:", data.response);
-
-            // Add to global jsPsych data properties
-            jsPsych.data.addProperties({
-                participant_age: data.response.age,
-                participant_gender: data.response.gender
-            });
+             // Get participant ID from URL (with defensive checks)
+             var pp_id = "DEFAULT_ID";
+                if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
+                    pp_id = jatos.urlQueryParameters.SONA_ID;
+                    debugLog(`SONA ID is ${pp_id}`);
+                } else {
+                    debugLog(`SONA ID not found, using default`);
+                }
+                data.response.id= pp_id;
+            // // Add to global jsPsych data properties
+            // jsPsych.data.addProperties({
+            //     participant_age: data.response.age,
+            //     participant_gender: data.response.gender
+            // });
         }
     };
 
@@ -637,6 +648,57 @@
             on_finish: function (data) {
                 delete data.question_order;
             }
+        };
+
+        const GAAIS_survey = {
+            type: jsPsychSurveyLikert,
+            preamble: `<div style="color: white; "font-size: ${24 * pixelsPerUnit / 150}px;">
+            <p> We are interested in your attitudes towards Artificial Intelligence. <br>
+            By Artificial Intelligence we mean devices that can perform tasks that would <br>
+            usually require human intelligence. Please note that these can be computers,<br>
+            robots or other hardware devices, possibly augmented with sensors or cameras, etc.<br>
+             Please complete the following scale, indicating your response to each item. <br>
+             There are no right or wrong answers. We are interested in your personal views.:</p></div>`,
+            questions: [
+                { prompt: "For routine transactions, I would rather interact with an artificially intelligent system than with a human", name: 'pos_1', labels: ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Artificial intelligence can provide new economic opportunities for this country", name: 'pos_2', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Organisations use artificial intelligence unethically", name: 'neg_3', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Artificially intelligent systems can help people feel happier", name: 'pos_4', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I am impressed by what artifical intelligence can do", name: 'pos_5', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I think artificially intelligent systems make many errors", name: 'neg_6', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I am interested in using artifical intelligent systems in my daily life", name: 'pos_7', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I find artificial intrelligence sinister", name: 'neg_8', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Artificial intelligence might take control of people", name: 'neg_9', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I think artificial intelligence is dangerous", name: 'neg_10', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Artificial intelligence can have positive impacts on people's well being", name: 'pos_11', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Artificial intelligence is exciting", name: 'pos_12', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I would be grateful if you could select Strongly Agree ", name: 'A', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "An artificially intelligent agent would be better than an employee in many routine jobs", name: 'pos_13', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "There are many beneficial applications of artificial intelligence", name: 'pos_14', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I shiver with discomfort when I think about future uses of artificial intelligence", name: 'neg_15', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Artificially intelligent systems can perform better than humans", name: 'pos_16', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Much of society will benefit from a future full of artificial intelligence", name: 'pos_17', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "I would like to use artificial intelligence in my own job", name: 'pos_18', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "People like me will suffer if artificial intelligence is used more and more", name: 'neg_19', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+                { prompt: "Artificial intelligence is used to spy on people", name: 'neg_20', labels:  ["Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"] },
+
+
+                
+            ],
+            randomize_question_order: true,
+            scale_width: 500,
+            button_label: 'Continue',
+            data: {
+                task: 'GAAIS'
+            },
+            // Add custom styling for white text
+            on_load: function () {
+                // Make all text elements white for dark background
+                document.querySelectorAll('.jspsych-survey-likert-statement').forEach(element => {
+                    element.style.color = 'white';
+                });
+            },
+            
         };
 
          
@@ -836,7 +898,7 @@
             stimulus: '<div class="fixation" style="font-size:48px;">+</div>',
             choices: "NO_KEYS",
             trial_duration: function () {
-                return getRandomInt(200, 500);
+                return getRandomInt(1200, 1500);
             },
             on_finish: function (data) {
                 //replace stim with simple placeholder
@@ -1711,6 +1773,7 @@
         timeline.push(enterFullscreen);
         timeline.push(messages.Welcome);
         timeline.push(messages.PISdoc);
+        
         timeline.push(demographicsForm);
         timeline.push(dass_survey);
         timeline.push(messages.pracInstructions);
@@ -1836,8 +1899,8 @@
 
 
         // Add self /other reflection timeline
-        timeline.push(doubleSliderTimeline);
-        //add debrief? 
+        timeline.push(doubleSliderTimeline);        
+        timeline.push(GAAIS_survey);
         timeline.push(messages.Debriefdoc);
         timeline.push(exitFullscreen);
 
