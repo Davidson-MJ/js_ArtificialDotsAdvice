@@ -113,7 +113,7 @@ ctable= movevars(ctable,'trial','After',2);
 
 for itrial= 1:height(ctable)
 if ctable.adviceCond(itrial)>1
-    ctable.adviceChoice{itrial}=nan;
+    ctable.adviceChoice{itrial}='NaN'; % text to make string search easier
 elseif ctable.adviceCond(itrial)==1
     % do nothing for now.
 
@@ -202,6 +202,21 @@ plot(ntrials, estAv2, 'r-o'); hold on;
 ylabel('rolling accuracy');
 legend('first resp', 'second');
 shg
+
+%% what is the total accuracy on c1, then c2 by option? 
+accC1 = sum(ctable.correct_1binary)/ height(ctable);
+accC2 = sum(ctable.correct_2binary)/ height(ctable);
+
+
+choiceY_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'yes')));
+choiceN_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'no')));
+forced_idx = find(ctable.adviceCond==2);
+noAdv_idx = find(ctable.adviceCond==3);
+
+subplot(2,2,3);
+bar(1:2, [accC1, accC2]);
+
+
 %% does confidence track accuracy?
 respwas ={'first', 'second'};
 PFX_Conf=[];
@@ -228,24 +243,60 @@ end
 subplot(2,2,3);
 bar(PFX_Conf); ylabel('mean confidence')
 set(gca,'xticklabels', {'correct', 'error'});
-legend('first conf', 'second conf');
+legend('first conf', 'second conf', 'Location', 'northoutside')
 
 subplot(2,2,4); 
 bar(PFX_RT);ylabel('mean RTs');
 % ylim([0 1]);
 set(gca,'xticklabels', {'correct', 'error'});
-legend('first conf', 'second conf')
+legend('first conf', 'second conf', 'Location', 'northoutside')
 shg
 %% next figure. plot agreement:
 % pseudo:
 % Proportion selected side = advice side (?)
 % Confidence change (congr vs incongr)
 
+%prop selected
+choiceTrials= find(ctable.adviceCond==1);
+choices = ctable.adviceChoice(choiceTrials);
+choseY = find(contains(choices, 'yes'));
+choseN = find(contains(choices, 'no'));
+propY= length(choseY)/length(choiceTrials);
+propN= length(choseN)/length(choiceTrials);
+% initial Confidence for each. 
+conf1onchoice = ctable.confidence_first(choiceTrials)
+conf_chY = conf1onchoice(choseY);
+conf_chN = conf1onchoice(choseN);
+clf;
+subplot(1,3,1)
+bar(1, [propY;propN], 'stacked');
+legend('yes', 'no');
+ylabel('proportion'); title('would you like advice?')
+
+subplot(132); 
+bar(1:2, [mean(conf_chY), mean(conf_chN)]); ylim([50 100]);
+title('initial confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+ylabel('initial confidence')
+
+% now final confidence:
+% initial Confidence for each. 
+conf2onchoice = ctable.confidence_second(choiceTrials);
+conf_chY = conf2onchoice(choseY);
+conf_chN = conf2onchoice(choseN);
+
+subplot(133); 
+bar(1:2, [mean(conf_chY), mean(conf_chN)]); ylim([50 100]);
+title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+ylabel('final confidence')
+%% accuracy when advice congr/not
 congrtrials = find(ctable.adviceCongruent==1);
 incongrtrials = find(ctable.adviceCongruent==0);
 
-clf;
-accData = nanmean(ctable.)
+
+accData = [nansum(ctable.correct_2binary(congrtrials))./length(congrtrials),...
+            nansum(ctable.correct_2binary(incongrtrials))./length(incongrtrials)]
+% confidence
+%%
 
 subplot(2,2,1);
 bar(bothDSB); ylabel('mean DSB (complete)'); 

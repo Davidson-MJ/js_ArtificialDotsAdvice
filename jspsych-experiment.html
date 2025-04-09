@@ -518,7 +518,8 @@
                 type: jsPsychHtmlButtonResponse,
                 stimulus: function () {
                     return `<div class="experiment-text" style="font-size: ${48 * pixelsPerUnit / 150}px;">
-            <p> Get ready to start Trial 1 of ${trialsPerBlock}, <br> <br>
+                <p> Take a short break if needed.<br> <br> 
+                    When ready, press below to start Trial 1 of ${trialsPerBlock}, <br> <br>
                 Block : ${blockIndex + 1} of ${totalBlocks} </p>`;
                 },
                 choices: ['Start'],
@@ -597,12 +598,18 @@
             console.log("Demographics collected:", data.response);
              // Get participant ID from URL (with defensive checks)
              var pp_id = "DEFAULT_ID";
-                if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
-                    pp_id = jatos.urlQueryParameters.SONA_ID;
-                    debugLog(`SONA ID is ${pp_id}`);
+                if (typeof jatos !== 'undefined') {
+                    if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
+                        pp_id = jatos.urlQueryParameters.SONA_ID;
+                        debugLog(`SONA ID is ${pp_id}`);
+                    } else {
+                        debugLog(`SONA ID not found, using default`);
+                    }
                 } else {
-                    debugLog(`SONA ID not found, using default`);
+                    debugLog(`Not in JATOS, using default`);
                 }
+
+                
                 data.response.id= pp_id;
             // // Add to global jsPsych data properties
             // jsPsych.data.addProperties({
@@ -1456,29 +1463,31 @@
                         iblock: iblock,
                     };
 
-                    // Retrieve the previous numerosity trial for QUEST update
-                    const lastTrial = jsPsych.data.get().filter({ task: 'numerosity' }).last(1).values()[0];
+                    // avoid updating after second response.?
+                    // Retrieve the previous numerosity trial for QUEST update.
 
-                    if (!lastTrial) {
-                        console.warn("No previous numerosity trial found. Skipping QUEST update.");
-                    } else {
-                        const leftDots = lastTrial.leftDots;
-                        const rightDots = lastTrial.rightDots;
-                        const difference = Math.abs(leftDots - rightDots);
+                    // const lastTrial = jsPsych.data.get().filter({ task: 'numerosity' }).last(1).values()[0];
 
-                        // Double-check which side actually had more dots
-                        const moreDotsSide = leftDots > rightDots ? 'left' : 'right';
-                        const correct = selectedSide === moreDotsSide;
+                    // if (!lastTrial) {
+                    //     console.warn("No previous numerosity trial found. Skipping QUEST update.");
+                    // } else {
+                    //     const leftDots = lastTrial.leftDots;
+                    //     const rightDots = lastTrial.rightDots;
+                    //     const difference = Math.abs(leftDots - rightDots);
 
-                        // Log detailed information for debugging
-                        debugLog(`Trial details: Left=${leftDots}, Right=${rightDots}, Difference=${difference}`);
-                        debugLog(`Selected ${selectedSide} with ${selectedValue.toFixed(1)}% confidence`);
-                        debugLog(`Correct side was ${moreDotsSide}, response was ${correct ? 'correct' : 'incorrect'}`);
+                    //     // Double-check which side actually had more dots
+                    //     const moreDotsSide = leftDots > rightDots ? 'left' : 'right';
+                    //     const correct = selectedSide === moreDotsSide;
 
-                        quest.update(difference, correct);
-                        data.correct = correct;
-                        data.threshold = quest.getThresholdEstimate();
-                    }
+                    //     // Log detailed information for debugging
+                    //     debugLog(`Trial details: Left=${leftDots}, Right=${rightDots}, Difference=${difference}`);
+                    //     debugLog(`Selected ${selectedSide} with ${selectedValue.toFixed(1)}% confidence`);
+                    //     debugLog(`Correct side was ${moreDotsSide}, response was ${correct ? 'correct' : 'incorrect'}`);
+
+                    //     quest.update(difference, correct);
+                    //     data.correct = correct;
+                    //     data.threshold = quest.getThresholdEstimate();
+                    // }
 
                     jsPsych.finishTrial(data);
                 });
@@ -1812,7 +1821,7 @@
                 trialInExp++;
 
                 // push block message.
-                if (itrial===0 || itrial===4 || itrial===9) {
+                if (itrial===0 ) {
                 timeline.push(createBlockStartMessage(iblock,nBlocks, nExpTrials));
                 }
                 
@@ -1821,17 +1830,20 @@
                     timeline.push(createAttentionCheck());
                 }
 
+                const condition = getAdviceCondition();
+                // Generate stimulus
                 const trialProcedure = {
                     // randomly select condition 1, 2, or 3 for Advice.
                     
                     timeline_variables: [{
-                        condition: getAdviceCondition() // returns condition from pseudo random mix (balanced numbers per block).
+                        condition: condition // from above
                     }],
                     
-                    // when the trial starts, store the current Condition in the global variable for easy consolidation.
                     on_start: function(){
+                        
                         currentCondition = jsPsych.timelineVariable('condition');
                     },
+
                     timeline: [
                         fixation,
                         numerosityTrial,
@@ -1900,7 +1912,7 @@
 
         // Add self /other reflection timeline
         timeline.push(doubleSliderTimeline);        
-        timeline.push(GAAIS_survey);
+        // timeline.push(GAAIS_survey);
         timeline.push(messages.Debriefdoc);
         timeline.push(exitFullscreen);
 
