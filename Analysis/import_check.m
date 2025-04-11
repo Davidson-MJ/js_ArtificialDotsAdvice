@@ -8,9 +8,11 @@ cd('Raw_data')
 % load csv as .mat
 % delete unused columns. 
 
-%loa
+
 mytab=readtable("experiment-data (52).csv");
-%% delete the bloat columns, single entries we dont need. 
+%% START DATA WRANGLING: 
+
+% delete the bloat columns, single entries we dont need. 
 del_columns={'success',...
     'timeout',...
     'failed_images',...
@@ -23,35 +25,39 @@ try mytab.([del_columns{icol}])=[];
 catch; disp(['no "' del_columns{icol} '" column']);
 end
 end
-% also to make this easy. convert all iscorrect strings into binary.
-% mytab.is_correctBinary = contains(mytab.is_correct,'true');
-% mytab= movevars(mytab,'is_correctBinary','After','is_correct');
+%% convert to binary most true-false columns: 
+forcols ={'correct', 'correct_1', 'adviceCorrect', 'correct_2'};
+for icol=1:length(forcols);
+
+    % extract the data.
+    tmp = nan(height(mytab),1);
+    for itrial = 1:height(mytab);
+        tmp= mytab.([forcols{icol}])(itrial);
+         if contains(tmp, 'true');
+            tmpdata(itrial,1)= 1;
+         elseif contains(tmp, 'false');
+            tmpdata(itrial,1)= 0;
+         else
+             tmpdata(itrial,1)= nan;
+         end
+    end
+    % rename and save after relevant data.:
+    mytab.([forcols{icol} '_binary'])= tmpdata;
+    mytab= movevars(mytab, [forcols{icol} '_binary'], 'after', forcols{icol});
+
+end
+
+
+
 %% there are various instructions and practice screens/trials recorded in the output. 
 % the experiment proper begins at the first 'stimulus==block message'
 
 %first sanity check, staircase performance during practice
 
-%
 exp_startrow = find(contains(mytab.stimulus,'expInstruc'), 1,'last');
-
-%% confidence_first only in the practice
-%%
+% only one trial type in practice (confidence_first)
 conf1_rows= find(contains(mytab.task(1:exp_startrow), 'confidence_first'));
-%%
 practab = mytab(conf1_rows,:);
-% convert to binary:
-tmpdata= nan(height(practab),1);
-
-for itrial = 1:height(practab);
-    tmp = practab.correct(itrial);
-    if contains(tmp, 'true');
-        tmpdata(itrial,1)= 1;
-    else
-        tmpdata(itrial,1)= 0;
-    end
-end
-practab.correct_binary = tmpdata;
-practab= movevars(practab,'correct_binary','After','correct');
 
 
 %% now plot for sanity check:
@@ -94,8 +100,6 @@ del_columns={'trial_type',...
     'top_response','bottom_response'};
 
 
-
-
 for icol= 1:length(del_columns);
 
 try ctable.([del_columns{icol}])=[];
@@ -130,7 +134,6 @@ if contains(ctable.adviceDir(itrial),dir1);
 else
     adviceCongr(itrial,1)=0;
 end
-
 end
 %add to table and position appropr.
 ctable.adviceCongruent = adviceCongr;
@@ -311,8 +314,9 @@ congrtrials = find(ctable.adviceCongruent==1);
 incongrtrials = find(ctable.adviceCongruent==0);
 
 
+
 accData = [nansum(ctable.correct_2binary(congrtrials))./length(congrtrials),...
-            nansum(ctable.correct_2binary(incongrtrials))./length(incongrtrials)]
+            nansum(ctable.correct_2binary(incongrtrials))./length(incongrtrials)];
 % confidence
 %%
 
