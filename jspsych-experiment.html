@@ -199,9 +199,27 @@
                 const completion_str= "https://uts-psych.sona-systems.com/webstudy_credit.aspx?experiment_id=93&credit_token=2e1c89bde83e447b8a413df54c340722&survey_code=";
                 //we need to get the participnant ID from the URL;
                 //this is done in the JATOS upload function below.
+                var pp_id = "DEFAULT_ID";
+                if (jatos != 'undefined') {
+                    // Get participant ID from URL (with defensive checks)
+                    if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
+                        pp_id = jatos.urlQueryParameters.SONA_ID;
+                        debugLog(`SONA ID is ${pp_id}`);
+                    } else {
+                        debugLog(`SONA ID not found, using default`);
+                    }
+                } else {
+                    debugLog(`Not in JATOS, using default`);
+                }
+
 
                 //note if not in JATOS redirect to the dfeault local URL
                 const default_url= "http://127.0.0.1:9000/jatos/36/43/results";
+                
+                // determine completion url based on pp_id:
+                // Create completion URL once
+                var completion_url = pp_id === "DEFAULT_ID" ? default_url : completion_str + pp_id;
+
                 
                 //if in JATOS (not dev mode), store as a file.                
                 // Get the data from jsPsych                
@@ -226,23 +244,6 @@
                                 function () {
                                     console.log("JSON data submitted successfully");
 
-                                    // Get participant ID from URL (with defensive checks)
-                                    var pp_id = "DEFAULT_ID";
-                                    if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
-                                        pp_id = jatos.urlQueryParameters.SONA_ID;
-                                        debugLog(`SONA ID is ${pp_id}`);
-                                    } else {
-                                        debugLog(`SONA ID not found, using default`);
-                                    }
-
-                                    // Create completion URL for receiving credit
-                                    var completion_url = completion_str + pp_id;
-                                                                        
-                                    if (pp_id === "DEFAULT_ID") { //if not SONA, redirect to local URL
-                                        completion_url = default_url;
-
-                                    }
-
                                     // Only redirect after both file upload AND data submission
                                     jatos.endStudyAndRedirect(completion_url);
                                 },
@@ -250,16 +251,7 @@
                                     console.error("Error submitting JSON data:", error);
 
                                     // Still redirect if JSON submission fails
-                                    var pp_id = "DEFAULT_ID";
-                                    if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
-                                        pp_id = jatos.urlQueryParameters.SONA_ID;
-                                    }
-
-                                    var completion_url =completion_str+ pp_id;
-                                    // Redirect to local URL if SONA ID not found
-                                    if (pp_id === "DEFAULT_ID") {
-                                        completion_url = default_url;
-                                    }
+                                    
                                     jatos.endStudyAndRedirect(completion_url);
                                 }
                             );
@@ -270,35 +262,16 @@
 
                             // Try to submit JSON data even if file upload fails
                             console.log("Attempting to submit JSON data after file upload failure");
+
                             jatos.submitResultData(jsonData,
                                 function () {
                                     console.log("JSON data submitted despite file upload failure");
-
-                                    // Get participant ID and redirect
-                                    var pp_id = "DEFAULT_ID";
-                                    if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
-                                        pp_id = jatos.urlQueryParameters.SONA_ID;
-                                    }
-
-                                    var completion_url = completion_str + pp_id;
-                                    if (pp_id === "DEFAULT_ID") {
-                                        completion_url = default_url;
-                                    }
+                                    
                                     jatos.endStudyAndRedirect(completion_url);
                                 },
                                 function (error) {
                                     console.error("Both file upload and JSON submission failed:", error);
-
-                                    // Still redirect if both methods fail
-                                    var pp_id = "DEFAULT_ID";
-                                    if (jatos.urlQueryParameters && jatos.urlQueryParameters.SONA_ID) {
-                                        pp_id = jatos.urlQueryParameters.SONA_ID;
-                                    }
-
-                                    var completion_url = completion_str + pp_id;
-                                    if (pp_id === "DEFAULT_ID") {
-                                        completion_url = default_url;
-                                    }
+                                    
                                     jatos.endStudyAndRedirect(completion_url);
                                 }
                             );
@@ -313,18 +286,18 @@
         });
 
         //Add code to reenter fullscreen if it's exited
-        // This approach monitors if fullscreen is exited and prompts to reenter            
-            document.addEventListener('fullscreenchange', function () {
-                if (!document.fullscreenElement && jsPsych.getProgress().current_trial_global > 1) {
-                    // Only show this message if we're past the first couple of trials
-                    alert('You have exited fullscreen mode. Please return to fullscreen for the best experience.');
+        // // This approach monitors if fullscreen is exited and prompts to reenter            
+        //     document.addEventListener('fullscreenchange', function () {
+        //         if (!document.fullscreenElement && jsPsych.getProgress().current_trial_global > 1) {
+        //             // Only show this message if we're past the first couple of trials
+        //             alert('You have exited fullscreen mode. Please return to fullscreen for the best experience.');
 
-                    // Re-enter fullscreen
-                    document.documentElement.requestFullscreen().catch(err => {
-                        console.log(`Error attempting to enable fullscreen: ${err.message}`);
-                    });
-                }
-        }); 
+        //             // Re-enter fullscreen
+        //             document.documentElement.requestFullscreen().catch(err => {
+        //                 console.log(`Error attempting to enable fullscreen: ${err.message}`);
+        //             });
+        //         }
+        // }); 
 
         // a better function for debugging: shorthand for console.log()
         function debugLog(message) {
@@ -335,7 +308,7 @@
         // set up some fixed variables.
         let nPracticeTrials = 25; //25 numerosity and first confidence response only (dots only)        
         let nExpTrials = 15; //15  full sequence, ntrials per block (dots-advice-dots) ! make sure divisible by nAdviceConds. to be balanced. (3)
-        let nBlocks = 15; // 10 toggle based on exp duration. 
+        let nBlocks = 15; // 15 toggle based on exp duration. 
         let pixelsPerUnit = 150; // for screen resize calibration (Default until calibrated)
 
         let dotsDuration = 500; // msec        
@@ -1466,28 +1439,29 @@
                     // avoid updating after second response.?
                     // Retrieve the previous numerosity trial for QUEST update.
 
-                    // const lastTrial = jsPsych.data.get().filter({ task: 'numerosity' }).last(1).values()[0];
+                    const lastTrial = jsPsych.data.get().filter({ task: 'numerosity' }).last(1).values()[0];
 
-                    // if (!lastTrial) {
-                    //     console.warn("No previous numerosity trial found. Skipping QUEST update.");
-                    // } else {
-                    //     const leftDots = lastTrial.leftDots;
-                    //     const rightDots = lastTrial.rightDots;
-                    //     const difference = Math.abs(leftDots - rightDots);
+                    if (!lastTrial) {
+                        console.warn("No previous numerosity trial found. Skipping QUEST update.");
+                    } else {
+                        const leftDots = lastTrial.leftDots;
+                        const rightDots = lastTrial.rightDots;
+                        const difference = Math.abs(leftDots - rightDots);
 
-                    //     // Double-check which side actually had more dots
-                    //     const moreDotsSide = leftDots > rightDots ? 'left' : 'right';
-                    //     const correct = selectedSide === moreDotsSide;
+                        // Double-check which side actually had more dots
+                        const moreDotsSide = leftDots > rightDots ? 'left' : 'right';
+                        const correct = selectedSide === moreDotsSide;
 
-                    //     // Log detailed information for debugging
-                    //     debugLog(`Trial details: Left=${leftDots}, Right=${rightDots}, Difference=${difference}`);
-                    //     debugLog(`Selected ${selectedSide} with ${selectedValue.toFixed(1)}% confidence`);
-                    //     debugLog(`Correct side was ${moreDotsSide}, response was ${correct ? 'correct' : 'incorrect'}`);
+                        // Log detailed information for debugging
+                        debugLog(`Trial details: Left=${leftDots}, Right=${rightDots}, Difference=${difference}`);
+                        debugLog(`Selected ${selectedSide} with ${selectedValue.toFixed(1)}% confidence`);
+                        debugLog(`Correct side was ${moreDotsSide}, response was ${correct ? 'correct' : 'incorrect'}`);
 
-                    //     quest.update(difference, correct);
-                    //     data.correct = correct;
-                    //     data.threshold = quest.getThresholdEstimate();
-                    // }
+                        // avoid updating quest on second.
+                        // quest.update(difference, correct);
+                        data.correct = correct;
+                        data.threshold = quest.getThresholdEstimate();
+                    }
 
                     jsPsych.finishTrial(data);
                 });
@@ -1912,9 +1886,10 @@
 
         // Add self /other reflection timeline
         timeline.push(doubleSliderTimeline);        
-        // timeline.push(GAAIS_survey);
-        timeline.push(messages.Debriefdoc);
+        timeline.push(GAAIS_survey);
         timeline.push(exitFullscreen);
+        timeline.push(messages.Debriefdoc);
+        
 
 
         //launch! 

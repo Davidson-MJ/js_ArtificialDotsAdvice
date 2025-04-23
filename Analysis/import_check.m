@@ -1,277 +1,568 @@
-% import check - this version ADVICE CONTEXT 
-
-% cd and import
-cd('/Users/164376/Documents/GitHub/js_ArtificialDotsAdvice/Analysis/');
-cd('Raw_data')
-
-%% pseudo code.
-% load csv as .mat
-% delete unused columns. 
+% import check - this version ADVICE CONTEXT
 
 
-mytab=readtable("experiment-data (52).csv");
-%% START DATA WRANGLING: 
 
-% delete the bloat columns, single entries we dont need. 
-del_columns={'success',...
-    'timeout',...
-    'failed_images',...
-    'failed_video',...
-    'failed_audio',...
-    'internal_node_id'};
-for icol= 1:length(del_columns);
+jobs=[];
 
-try mytab.([del_columns{icol}])=[];
-catch; disp(['no "' del_columns{icol} '" column']);
+jobs.import_andwrangle = 1; % resaves as matlab tables.
+jobs.extractandStoreperPPant=1; %
+
+% plots:
+jobs.plot_ppPractice=0;
+jobs.plot_ppStaircase =0; % plots dot diff and rolling accuracy per ppant.
+jobs.plot_ppAccandConf_basic=0;
+jobs.plot_ppAgreegmentwithAdvice=0;
+
+if jobs.import_andwrangle==1
+
+
+    for ippant=1
+        % cd and import
+        cd('/Users/164376/Documents/GitHub/js_ArtificialDotsAdvice/Analysis/');
+        cd('Raw_data')
+
+        if ippant <10
+            pnum= ['0' num2str(ippant)]; % maintains order 01,02,03...,10..
+        else
+            pnum = [num2str(ippant)];
+        end
+        % pseudo code.
+        % load csv as .mat
+        % delete unused columns.
+
+
+        % mytab=readtable("experiment-data-MD.csv");
+        mytab=readtable("experiment-data (56).csv");
+
+        % per participant, store relevant data in one structure for later save:
+        PFX_Data= [];
+
+        %%  START DATA WRANGLING:
+        % 1) delete unnecessary columns
+        % 2) correct for the bug (all nans for correct_2 in 1 dataset).
+        % 3) convert to binary most true-false columns (for easy accuracy
+        % summaries).
+        % 4) convert all conf from -100 -50, 50 100 to -50 0 0 50, then zscored.
+        % delete the bloat columns, single entries we dont need.
+        del_columns={'success',...
+            'timeout',...
+            'failed_images',...
+            'failed_video',...
+            'failed_audio',...
+            'internal_node_id'};
+        for icol= 1:length(del_columns);
+
+            try mytab.([del_columns{icol}])=[];
+            catch; disp(['no "' del_columns{icol} '" column']);
+            end
+        end
+
+        %% correct for the bug (no correct_2).
+        allr = find(contains(mytab.stimulus, 'second response'));
+        allnum = find(contains(mytab.stimulus, 'Dot display')); % numerosity (dot) trials
+        allconsol = find(contains(mytab.stimulus, 'consolidated'));
+        % first convert all to cell.
+        if ~iscell(mytab.correct_2)
+            % mytab.correct_2= num2cell(mytab.correct_2);
+            mytab.correct_2= mytab.correct_1;
+            %% continue with this step only if needed (data-md)
+            for itrial = 1:length(allr)
+                rowindx = allr(itrial);
+                selectedside = mytab.selected_side{rowindx}; %'left', or 'right'
+                % find previous numerosity trial and what was correct.
+                prevNum = find(contains(mytab.stimulus(1:rowindx), 'Dot display'), 1, "last");
+                % on that trial, which side had more?
+                if mytab.leftDots(prevNum) > mytab.rightDots(prevNum)
+                    corside = 'left';
+                elseif mytab.leftDots(prevNum) < mytab.rightDots(prevNum)
+                    corside = 'right';
+                else
+                    error(['check data on row indx ' num2str(prevNum)]);
+
+                end
+
+                if contains(selectedside,corside);
+                    thiswas  = 'true';
+                else
+                    thiswas = 'false';
+                end
+
+                mytab.correct_2{rowindx}= thiswas;
+
+                %(converted to binary below)
+
+                %also update the consolidated row entry:
+                cindx = find(allconsol>rowindx,1,'first');
+                crow= allconsol(cindx);
+
+                %update:
+
+                mytab.correct_2{crow} =thiswas;
+
+            end
+        end
+
+
+
+        %% convert to binary most true-false columns:
+        forcols ={'correct', 'correct_1', 'adviceCorrect', 'correct_2'};
+        for icol=1:length(forcols);
+
+            % extract the data.
+            tmpdata = nan(height(mytab),1);
+            for itrial = 1:height(mytab);
+                tmp= mytab.([forcols{icol}])(itrial);
+                if isempty(tmp{1})
+                    tmpdata(itrial,1)= nan;
+                elseif contains(tmp{1}, 'true');
+                    tmpdata(itrial,1)= 1;
+                elseif contains(tmp{1}, 'false');
+                    tmpdata(itrial,1)= 0;
+
+                end
+            end
+            % rename and save after relevant data.:
+            mytab.([forcols{icol} '_binary'])= tmpdata;
+            mytab= movevars(mytab, [forcols{icol} '_binary'], 'after', forcols{icol});
+
+        end
+
+
+        %% adjust confidence values before zscoring.
+
+        % we are mainly interested in the consolidated data rows.
+        consolrows = find(contains(mytab.task, 'consolidated'));
+        for irow = 1: length(consolrows);
+
+            %for each row, subtract 50 from confidence values:
+            userow = consolrows(irow);
+            mytab.confidence_first(userow) = mytab.confidence_first(userow)-50;
+            mytab.confidence_second(userow) = mytab.confidence_second(userow)-50;
+            % adjust to be - for left, + for right.
+            if contains(mytab.selectedSide_first(userow),'left');
+                mytab.confidence_first(userow) = mytab.confidence_first(userow)*-1;
+            end
+            if contains(mytab.selectedSide_second(userow),'left');
+                mytab.confidence_second(userow) = mytab.confidence_second(userow)*-1;
+            end
+
+        end
+
+        %% now zscore all.
+        allc1 = mytab.confidence_first;
+        allc2 = mytab.confidence_second;
+        allconf= [allc1;allc2];
+        % not zscore doesnt work with nan.
+
+        confreal = allconf(~isnan(allconf));
+        zconf = zscore(confreal);
+        %%
+        % now the tricky bit, for each original conf value, find the corresponding
+        % zscore and place in the table.
+        % only use the consol rows.
+        % first create nan rows:
+        mytab.confidence_first_z=nan(height(mytab),1);
+        mytab.confidence_second_z=nan(height(mytab),1);
+        %
+
+        for itrial=1:length(consolrows)
+            ir = consolrows(itrial);
+            ogC1= mytab.confidence_first(ir);
+            ogC2= mytab.confidence_second(ir);
+
+            % find the index in confreal.
+            indxs = dsearchn(confreal, [ogC1, ogC2]');
+            %use these indexes for the zscores:
+            znow = zconf(indxs,1);
+            mytab.confidence_first_z(ir) = znow(1);
+            mytab.confidence_second_z(ir) = znow(2);
+        end
+        % when all said and done, move the zscored cols to the right spot.
+        mytab = movevars(mytab, 'confidence_first_z', 'After', 'confidence_first');
+        mytab = movevars(mytab, 'confidence_second_z', 'After', 'confidence_second');
+
+        % include change in conf.
+        confChange = mytab.confidence_second_z - mytab.confidence_first_z;
+        mytab.confChange_z = confChange;
+        mytab = movevars(mytab, 'confChange_z', 'After', 'confidence_second_z');
+
+        %%
+        %% DASS calc:
+        dassrow = find(contains(mytab.task, 'dass10'));
+        DASSresponses = mytab.response{dassrow};
+        %Note the DASS output is a string, with embedded shorthand keys for question ID.
+        % questions shorthands are:
+        % felt_panic
+        % no_initiative
+        % felt_blue
+        % was_intolerant
+        % nothing_forward
+        % felt_scared
+        % over_react
+        % felt_worry
+        % no_relax
+        % no_positive
+        % felt_annoyed
+        % EOL_thoughts
+        % D, A, S = Depression, Anxiety, Stress items. * = reverse scored.
+
+        % for each key, find the response (Likert score 1,2,3,4: Never, Sometimes, Often, Almost Always)
+
+
+
+        %% GAAIS calc
+        gaaisrow = find(contains(mytab.task, 'GAAIS'));
+        GAAISresponses = mytab.response{dassrow};
+
+
+
+        %% SAVE 
+        disp('saving grand participant table')...
+        % with mytab now clean, lets save for reuse: 
+        save(['Participant_' pnum], 'mytab', '-append');
+        %%
+        
+        %% now for condensed data from the experiment.
+        disp('creating condensed participant data table...')
+
+        consolidated_rows = find(contains(mytab.stimulus,'consolidated-trial-data'));
+        ctable = mytab(consolidated_rows,:);
+
+        %%
+        % need to do some reordering.
+        % delete the bloat columns, single entries we dont need.
+        del_columns={'trial_type',...
+            'trial_index',...
+            'participant_age',...
+            'participant_gender',...
+            'rt',...
+            'stimulus',...
+            'response',...
+            'task',...
+            'pixels_per_unit',...
+            'itrial','iblock', 'leftDots', 'rightDots','difference',...
+            'selected_side','confidence_value', 'left_confidence', 'right_confidence',...
+            'correct', 'threshold', 'block_num', 'advice_direction', 'top_prompt','bottom_prompt',...
+            'top_response','bottom_response'};
+
+
+        for icol= 1:length(del_columns);
+
+            try ctable.([del_columns{icol}])=[];
+            catch; disp(['no "' del_columns{icol} '" column']);
+            end
+        end
+        %tidy the order.
+        ctable= movevars(ctable,'block','After',1);
+        ctable= movevars(ctable,'trial','After',2);
+
+        %% seems to be an indexing bug in the consolidated data rows. adviceConds
+        % are 1,2,3 (choice, forced, no advice). Some 2 and 3 are displaying the
+        % choice selected from the previous '1' (and advice direction).
+
+        % change adviceChoice to nan for adviceConds 2,3.
+        % change adviceDir to nan for adviceCOnd 3
+
+        for itrial= 1:height(ctable)
+            if ctable.adviceCond(itrial)>1
+                ctable.adviceChoice{itrial}='NaN'; % text to make string search easier
+            elseif ctable.adviceCond(itrial)==3
+                ctable.adviceDir(itrial)= 'NaN';
+            end
+        end
+
+        %% include a column for whether advice was congruent with decision 1.
+        adviceCongr=[];
+        for itrial= 1:height(ctable);
+            dir1 = ctable.selectedSide_first(itrial);
+
+            if contains(ctable.adviceDir(itrial),dir1);
+                adviceCongr(itrial,1)=1;
+            else
+                adviceCongr(itrial,1)=0;
+            end
+        end
+        %add to table and position appropr.
+        ctable.adviceCongruent = adviceCongr;
+        ctable= movevars(ctable, 'adviceCongruent', 'After', 'adviceDir');
+
+        %%  include integer (1,2) for left and right to make data processing easier.
+        tmp=nan;
+        lr= find(contains(ctable.selectedSide_first,'left'));
+        rr= find(contains(ctable.selectedSide_first,'right'));
+        tmp(lr,1) = 1;
+        tmp(rr,1) = 2;
+        ctable.selectedSide_int_first = tmp;
+        ctable= movevars(ctable, 'selectedSide_int_first', 'After', 'selectedSide_first');
+
+        % same for second:
+        tmp=nan;
+        lr= find(contains(ctable.selectedSide_second,'left'));
+        rr= find(contains(ctable.selectedSide_second,'right'));
+        tmp(lr,1) = 1;
+        tmp(rr,1) = 2;
+        ctable.selectedSide_int_second = tmp;
+        ctable= movevars(ctable, 'selectedSide_int_second', 'After', 'selectedSide_second');
+        %% now we can confirm basic stats:
+        % staircase first (total exp). convert correct_1 to binary:
+        % convert to binary:
+        [tmpdata, tmpdata2]= deal(nan(height(ctable),1));
+
+        for itrial = 1:height(ctable);
+
+            tmp = ctable.correct_1(itrial);
+            if contains(tmp, 'true');
+                tmpdata(itrial,1)= 1;
+            else
+                tmpdata(itrial,1)= 0;
+            end
+            %
+            tmp = ctable.correct_2(itrial);
+            if contains(tmp, 'true');
+                tmpdata2(itrial,1)= 1;
+            else
+                tmpdata2(itrial,1)= 0;
+            end
+        end
+        ctable.correct_1binary = tmpdata;
+        ctable.correct_2binary = tmpdata2;
+        ctable= movevars(ctable,'correct_1binary','After','correct_1');
+        ctable= movevars(ctable,'correct_2binary','After','correct_2');
+
+        %% SAVE now save this revised condensed table.
+        disp('Saving condensed table');
+        % with mytab now clean, lets save for reuse: 
+        save(['Participant_' pnum], 'ctable', '-append');
+
+    
+    end  % per ppant
+end % job import and wrangle
+
+
+if jobs.extractandStoreperPPant==1
+% here we will extract the information we need for later inferential
+% statistics at the group level: 
+%% List to save, wrangle towards this:
+    %% some descriptives:
+    % age, gender,
+    % DASS scores (D,A, S)
+    % GAAIS scores (?)
+    % Attntion checks shown
+    % Attntion checks passed
+    % Exp Duration
+
+    %% Participant output:
+    % Total first Choice Accuracy
+    % Total second Choice Accuracy
+    % Total advice Accuracy
+    % First choice Confidence correct
+    % First choice Confidence error
+    % First choice Confidence correct, Z
+    % First choice Confidence error, Z
+
+
+ %% accuracy when advice congr/not
+        congrtrials = find(ctable.adviceCongruent==1);
+        incongrtrials = find(ctable.adviceCongruent==0);
+
+
+
+        accData = [nansum(ctable.correct_2binary(congrtrials))./length(congrtrials),...
+            nansum(ctable.correct_2binary(incongrtrials))./length(incongrtrials)];
+
+        % what is the confidence change when congruent?
+        % we can use the change in Zscores:
+        confChange = ctable.confidence_second_z - ctable.confidence_first_z;
+
+        confData = [nansum(confChange(congrtrials))/length(congrtrials),...
+            nansum(confChange(incongrtrials))/length(incongrtrials)]
+
+
+
 end
+
+%% Participant level plots:
+%% if
+if jobs.plot_ppPractice ==1
+        
+    %% first sanity check, staircase performance during practice
+
+        exp_startrow = find(contains(mytab.stimulus,'expInstruc'), 1,'last');
+        % only one trial type in practice (confidence_first)
+        conf1_rows= find(contains(mytab.task(1:exp_startrow), 'confidence_first'));
+        %numerosity rows have the dot diff and staircase performance.
+        numer_rows = find(contains(mytab.task(1:exp_startrow) , 'numerosity'));
+        numertab = mytab(numer_rows,:);
+
+        % now plot for sanity check:
+        clf;
+        ntrials = 1:height(numertab);
+        subplot(221);
+        plot(ntrials, numertab.difference)
+        ylabel('dotdifference per trial');
+        title('Practice')
+        shg
+
+        % rolling average
+        estAv = nan(length(ntrials),1);
+        conftab = mytab(conf1_rows,:);
+        for itrial = ntrials
+            estAv(itrial,1)= sum(conftab.correct_binary(1:itrial))/ itrial;
+        end
+        %
+        subplot(222);
+        plot(ntrials, estAv, 'r-o')
+        ylabel('rolling accuracy');
+        title('Practice')
+        shg
 end
-%% convert to binary most true-false columns: 
-forcols ={'correct', 'correct_1', 'adviceCorrect', 'correct_2'};
-for icol=1:length(forcols);
+if jobs.plot_ppStaircase==1
+     %% plot dot diff and staircase:
 
-    % extract the data.
-    tmp = nan(height(mytab),1);
-    for itrial = 1:height(mytab);
-        tmp= mytab.([forcols{icol}])(itrial);
-         if contains(tmp, 'true');
-            tmpdata(itrial,1)= 1;
-         elseif contains(tmp, 'false');
-            tmpdata(itrial,1)= 0;
-         else
-             tmpdata(itrial,1)= nan;
-         end
-    end
-    % rename and save after relevant data.:
-    mytab.([forcols{icol} '_binary'])= tmpdata;
-    mytab= movevars(mytab, [forcols{icol} '_binary'], 'after', forcols{icol});
+        clf;
+        ntrials = 1:height(ctable);
+        subplot(221);
+        plot(ntrials, ctable.dotsDiff);
+        ylabel('dotdifference per trial');
+        title('Experiment')
+        shg
+        % each bloc had 15 trials, so mark block start end. 
+        hold on;
+        imark = 15:15:225;
+        for im=  1:length(imark)
+        plot([imark(im), imark(im)], [ylim], 'r:')
 
-end
+        end
 
+        % rolling average
+        [estAv, estAv2] = deal(nan(length(ntrials),1));
 
+        for itrial = ntrials
+            estAv(itrial,1)= nansum(ctable.correct_1binary(1:itrial))/ itrial;
+            estAv2(itrial,1)= nansum(ctable.correct_2binary(1:itrial))/ itrial;
+        end
 
-%% there are various instructions and practice screens/trials recorded in the output. 
-% the experiment proper begins at the first 'stimulus==block message'
-
-%first sanity check, staircase performance during practice
-
-exp_startrow = find(contains(mytab.stimulus,'expInstruc'), 1,'last');
-% only one trial type in practice (confidence_first)
-conf1_rows= find(contains(mytab.task(1:exp_startrow), 'confidence_first'));
-practab = mytab(conf1_rows,:);
-
-
-%% now plot for sanity check:
-clf;
-ntrials = 1:height(practab);
-subplot(221);
-plot(ntrials, practab.threshold);
-ylabel('dotdifference per trial');
-shg
-
-% rolling average
-estAv = nan(length(ntrials),1);
-for itrial = ntrials
-estAv(itrial,1)= sum(practab.correct_binary(1:itrial))/ itrial;
-end
-%%
-subplot(222);
-plot(ntrials, estAv, 'r-o')
-ylabel('rolling accuracy');
-shg
-%%
-%% now for the experiment.
-consolidated_rows = find(contains(mytab.stimulus,'consolidated-trial-data'));
-ctable = mytab(consolidated_rows,:);
-%%
-% need to do some reordering. 
-% delete the bloat columns, single entries we dont need. 
-del_columns={'trial_type',...
-    'trial_index',...
-    'participant_age',...
-    'participant_gender',...
-    'rt',...
-    'stimulus',...
-    'response',...
-    'task',...
-    'pixels_per_unit',...
-    'itrial','iblock', 'leftDots', 'rightDots','difference',...
-    'selected_side','confidence_value', 'left_confidence', 'right_confidence',...
-    'correct', 'threshold', 'block_num', 'advice_direction', 'top_prompt','bottom_prompt',...
-    'top_response','bottom_response'};
-
-
-for icol= 1:length(del_columns);
-
-try ctable.([del_columns{icol}])=[];
-catch; disp(['no "' del_columns{icol} '" column']);
-end
-end
-%tidy the order. 
-ctable= movevars(ctable,'block','After',1);
-ctable= movevars(ctable,'trial','After',2);
-
-%% seems to be an indexing bug in the consolidated data rows. adviceConds 
-% are 1,2,3 (choice, forced, no advice). Some 2 and 3 are displaying the
-% choice selected from the previous '1'. 
-% change adviceChoice to nan for adviceConds 2,3.
-
-for itrial= 1:height(ctable)
-if ctable.adviceCond(itrial)>1
-    ctable.adviceChoice{itrial}='NaN'; % text to make string search easier
-elseif ctable.adviceCond(itrial)==1
-    % do nothing for now.
-
-end
+        %
+        subplot(222);
+        plot(ntrials, estAv, 'b-o'); hold on;
+        plot(ntrials, estAv2, 'r-o'); hold on;
+        ylabel('rolling accuracy');
+        title('Experiment')
+        legend('first resp', 'second');
+        shg
 end
 
-%% include a column for whether advice was congruent with decision 1.
-adviceCongr=[];
-for itrial= 1:height(ctable);
-dir1 = ctable.selectedSide_first(itrial);
+if jobs.plot_ppAccandConf_basic
+    %% what is the total accuracy on c1, then c2 by option?
+        accC1 = sum(ctable.correct_1binary)/ height(ctable);
+        accC2 = sum(ctable.correct_2binary)/ height(ctable);
 
-if contains(ctable.adviceDir(itrial),dir1);
-    adviceCongr(itrial,1)=1;
-else
-    adviceCongr(itrial,1)=0;
-end
-end
-%add to table and position appropr.
-ctable.adviceCongruent = adviceCongr;
-ctable= movevars(ctable, 'adviceCongruent', 'After', 'adviceDir');
 
-%%  include integer (1,2) for left and right to make data processing easier.
-tmp=nan;
-lr= find(contains(ctable.selectedSide_first,'left'));
-rr= find(contains(ctable.selectedSide_first,'right'));
-tmp(lr,1) = 1;
-tmp(rr,1) = 2;
-ctable.selectedSide_int_first = tmp;
-ctable= movevars(ctable, 'selectedSide_int_first', 'After', 'selectedSide_first');
+        choiceY_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'yes')));
+        choiceN_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'no')));
+        forced_idx = find(ctable.adviceCond==2);
+        noAdv_idx = find(ctable.adviceCond==3);
 
-% same for second:
-tmp=nan;
-lr= find(contains(ctable.selectedSide_second,'left'));
-rr= find(contains(ctable.selectedSide_second,'right'));
-tmp(lr,1) = 1;
-tmp(rr,1) = 2;
-ctable.selectedSide_int_second = tmp;
-ctable= movevars(ctable, 'selectedSide_int_second', 'After', 'selectedSide_second');
-%% now we can confirm basic stats:
-% staircase first (total exp). convert correct_1 to binary:
-% convert to binary:
-[tmpdata, tmpdata2]= deal(nan(height(ctable),1));
+        subplot(2,2,3);
+        bar(1:2, [accC1, accC2]);
+        ylabel('Accuract on first and second choice');
+        ylabel('proportion correct');
+        set(gca,'xticklabels', {'first', 'second'});
+        xlabel('response order');
+        ylim([.5 1]);
 
-for itrial = 1:height(ctable);
+        %acc per type
+        chY_acc = sum(ctable.correct_2binary(choiceY_idx))/ length(choiceY_idx);
+        chN_acc = sum(ctable.correct_2binary(choiceN_idx))/ length(choiceN_idx);
+        forced_acc= sum(ctable.correct_2binary(forced_idx))/ length(forced_idx);
+        noAdv_acc= sum(ctable.correct_2binary(noAdv_idx))/ length(noAdv_idx);
 
-    tmp = ctable.correct_1(itrial);
-    if contains(tmp, 'true');
-        tmpdata(itrial,1)= 1;
-    else
-        tmpdata(itrial,1)= 0;
-    end
-%
-    tmp = ctable.correct_2(itrial);
-    if contains(tmp, 'true');
-        tmpdata2(itrial,1)= 1;
-    else
-        tmpdata2(itrial,1)= 0;
-    end
-end
-ctable.correct_1binary = tmpdata;
-ctable.correct_2binary = tmpdata2;
-ctable= movevars(ctable,'correct_1binary','After','correct_1');
-ctable= movevars(ctable,'correct_2binary','After','correct_2');
-%% plot total exp accuracy and thresholds.
+        subplot(224);
+        bar(1:4, [chY_acc, chN_acc, forced_acc, noAdv_acc]);
+        xlabel('advice condition');
+        ylabel('proportion correct');
+        set(gca,'xticklabels', {'chose Yes', 'chose No', 'forced', 'no advice'})
+        shg
 
-clf;
-ntrials = 1:height(ctable);
-subplot(221);
-plot(ntrials, ctable.dotsDiff);
-ylabel('dotdifference per trial');
-shg
 
-% rolling average
-[estAv, estAv2] = deal(nan(length(ntrials),1));
+        %% does confidence track accuracy?
+        respwas ={'first', 'second'};
+        PFX_Conf=[];
+        PFX_RT=[];
+        for iresp = 1:2
+            corr_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==1);
+            err_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==0);
 
-for itrial = ntrials
-estAv(itrial,1)= sum(ctable.correct_1binary(1:itrial))/ itrial;
-estAv2(itrial,1)= sum(ctable.correct_2binary(1:itrial))/ itrial;
+            % collect responses. - absolute for confidence data.
+            confData = abs(ctable.(['confidence_' respwas{iresp}]));
+
+            rtData= ctable.(['rt_' num2str(iresp)]);
+
+            meanConf = [nanmean(confData(corr_idx)),...
+                nanmean(confData(err_idx))];
+
+            meanRT = [nanmean(rtData(corr_idx)), ...
+                nanmean(rtData(err_idx))];
+
+            PFX_Conf(iresp,1:2) = meanConf;
+            PFX_RT(iresp,1:2) = meanRT;
+        end
+        %%plot
+
+        subplot(2,2,3);
+        bar(PFX_Conf); ylabel('mean confidence')
+        set(gca,'xticklabels', {'first response', 'second response'});
+        legend('correct', 'error', 'Location', 'northoutside')
+
+        subplot(2,2,4);
+        bar(PFX_RT);ylabel('mean RTs');
+        % ylim([0 1]);
+        set(gca,'xticklabels', {'first response', 'second response'});
+        legend('correct', 'error', 'Location', 'northoutside')
+        shg
 end
 
-%
-subplot(222);
-plot(ntrials, estAv, 'b-o'); hold on;
-plot(ntrials, estAv2, 'r-o'); hold on;
-ylabel('rolling accuracy');
-legend('first resp', 'second');
-shg
+if jobs.plot_ppAgreegmentwithAdvice    
+%% next figure. plot agreement:
+        % pseudo:
+        % Proportion selected side = advice side (?)
+        % Confidence change (congr vs incongr)
 
-%% what is the total accuracy on c1, then c2 by option? 
-accC1 = sum(ctable.correct_1binary)/ height(ctable);
-accC2 = sum(ctable.correct_2binary)/ height(ctable);
+        %prop selected
+        choiceTrials= find(ctable.adviceCond==1);
+        choices = ctable.adviceChoice(choiceTrials);
+        choseY = find(contains(choices, 'yes'));
+        choseN = find(contains(choices, 'no'));
+        propY= length(choseY)/length(choiceTrials);
+        propN= length(choseN)/length(choiceTrials);
+        % initial Confidence for each.
+        conf1onchoice = abs(ctable.confidence_first(choiceTrials))
+        conf_chY = conf1onchoice(choseY);
+        conf_chN = conf1onchoice(choseN);
+        clf;
+        subplot(1,3,1)
+        bar(1, [propY;propN], 'stacked');
+        legend('yes', 'no');
+        ylabel('proportion'); title('would you like advice?')
 
+        subplot(132);
+        bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+        % ylim([50 100]);
+        title('initial confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+        ylabel('initial confidence')
 
-choiceY_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'yes')));
-choiceN_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'no')));
-forced_idx = find(ctable.adviceCond==2);
-noAdv_idx = find(ctable.adviceCond==3);
+        % now final confidence for each.
+        conf2onchoice = abs(ctable.confidence_second(choiceTrials));
+        conf_chY = conf2onchoice(choseY);
+        conf_chN = conf2onchoice(choseN);
 
-subplot(2,2,3);
-bar(1:2, [accC1, accC2]);
-ylabel('Accuract on first and second choice');
-ylabel('proportion correct');
-set(gca,'xticklabels', {'first', 'second'});
-xlabel('response order');
-ylim([.5 1]);
-
-%acc per type
-chY_acc = sum(ctable.correct_2binary(choiceY_idx))/ length(choiceY_idx);
-chN_acc = sum(ctable.correct_2binary(choiceN_idx))/ length(choiceN_idx);
-forced_acc= sum(ctable.correct_2binary(forced_idx))/ length(forced_idx);
-noAdv_acc= sum(ctable.correct_2binary(noAdv_idx))/ length(noAdv_idx);
-
-subplot(224);
-bar(1:4, [chY_acc, chN_acc, forced_acc, noAdv_acc]);
-xlabel('advice condition');
-ylabel('proportion correct');
-set(gca,'xticklabels', {'chose Yes', 'chose No', 'forced', 'no advice'})
-shg
-
-
-%% does confidence track accuracy?
-respwas ={'first', 'second'};
-PFX_Conf=[];
-PFX_RT=[];
-for iresp = 1:2
-    corr_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==1);
-    err_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==0);
-
-    % collect responses.
-    confData = ctable.(['confidence_' respwas{iresp}]);
-    rtData= ctable.(['rt_' num2str(iresp)]);
-
-    meanConf = [nanmean(confData(corr_idx)),...
-        nanmean(confData(err_idx))];
-
-    meanRT = [nanmean(rtData(corr_idx)), ...
-        nanmean(rtData(err_idx))];
-
-    PFX_Conf(iresp,1:2) = meanConf;
-    PFX_RT(iresp,1:2) = meanRT;
+        subplot(133);
+        bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+        % ylim([50 100]);
+        title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+        ylabel('final confidence')
+        shg
 end
-%%plot
-
-subplot(2,2,3);
-bar(PFX_Conf); ylabel('mean confidence')
-set(gca,'xticklabels', {'correct', 'error'});
-legend('first conf', 'second conf', 'Location', 'northoutside')
-
-subplot(2,2,4); 
-bar(PFX_RT);ylabel('mean RTs');
-% ylim([0 1]);
-set(gca,'xticklabels', {'correct', 'error'});
-legend('first conf', 'second conf', 'Location', 'northoutside')
-shg
 %% next figure. plot agreement:
 % pseudo:
 % Proportion selected side = advice side (?)
@@ -284,100 +575,32 @@ choseY = find(contains(choices, 'yes'));
 choseN = find(contains(choices, 'no'));
 propY= length(choseY)/length(choiceTrials);
 propN= length(choseN)/length(choiceTrials);
-% initial Confidence for each. 
-conf1onchoice = ctable.confidence_first(choiceTrials)
+% initial Confidence for each.
+conf1onchoice = abs(ctable.confidence_first(choiceTrials));
 conf_chY = conf1onchoice(choseY);
 conf_chN = conf1onchoice(choseN);
+
+
 clf;
 subplot(1,3,1)
 bar(1, [propY;propN], 'stacked');
 legend('yes', 'no');
 ylabel('proportion'); title('would you like advice?')
 
-subplot(132); 
-bar(1:2, [mean(conf_chY), mean(conf_chN)]); ylim([50 100]);
+subplot(132);
+bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+% ylim([50 100]);
 title('initial confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
 ylabel('initial confidence')
 
-% now final confidence:
-% initial Confidence for each. 
-conf2onchoice = ctable.confidence_second(choiceTrials);
+% now final confidence for each.
+conf2onchoice = abs(ctable.confidence_second(choiceTrials));
 conf_chY = conf2onchoice(choseY);
 conf_chN = conf2onchoice(choseN);
 
-subplot(133); 
-bar(1:2, [mean(conf_chY), mean(conf_chN)]); ylim([50 100]);
+subplot(133);
+bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+% ylim([50 100]);
 title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
 ylabel('final confidence')
-%% accuracy when advice congr/not
-congrtrials = find(ctable.adviceCongruent==1);
-incongrtrials = find(ctable.adviceCongruent==0);
-
-
-
-accData = [nansum(ctable.correct_2binary(congrtrials))./length(congrtrials),...
-            nansum(ctable.correct_2binary(incongrtrials))./length(incongrtrials)];
-% confidence
-%%
-
-subplot(2,2,1);
-bar(bothDSB); ylabel('mean DSB (complete)'); 
-set(gca,'xticklabels', {'preDSB', 'postDSB'});
-legend('easy', 'hard');
-ylim([0 1])
-
-subplot(2,2,4);
-bar(bothDSB_digits); ylabel('mean DSB (by digits)'); 
-set(gca,'xticklabels', {'preDSB', 'postDSB'});
-legend('easy', 'hard');
-ylim([0 1])
-
-% subplot(234);
-% bar(postDSB); ylabel('mean postDSB')
-shg
-% plot()
-
-%% now to calculate the pre and post by image type.
-% (vegetation level)
-
-barData=[];
-v_1 = find(ctable.vegetationLevel==1);
-v_2 = find(ctable.vegetationLevel==2);
-v_3 = find(ctable.vegetationLevel==3);
-
-
-clf;
-meanRT = [nanmean(ctable.Vis_meanRT(v_1)),nanmean(ctable.Vis_meanRT(v_2)), nanmean(ctable.Vis_meanRT(v_3))];
-meanAcc = [nanmean(ctable.Vis_propCorr(v_1)),nanmean(ctable.Vis_propCorr(v_2)),nanmean(ctable.Vis_propCorr(v_3))];
-
-preDSB = [nanmean(ctable.DSBpre_propcorrect(v_1)),nanmean(ctable.DSBpre_propcorrect(v_2)),nanmean(ctable.DSBpre_propcorrect(v_3))];
-preDSB_digits = [nanmean(ctable.DSBpre_digitaccuracy(v_1)), nanmean(ctable.DSBpre_digitaccuracy(v_2)),nanmean(ctable.DSBpre_digitaccuracy(v_3))];
-
-postDSB= [nanmean(ctable.DSBpost_propcorrect(v_1)),nanmean(ctable.DSBpost_propcorrect(v_2)), nanmean(ctable.DSBpost_propcorrect(v_3))];
-
-postDSB_digits = [nanmean(ctable.DSBpost_digitaccuracy(v_1)),nanmean(ctable.DSBpost_digitaccuracy(v_2)),nanmean(ctable.DSBpost_digitaccuracy(v_3))];
-
-bothDSB= [preDSB;postDSB];
-bothDSB_digits= [preDSB_digits; postDSB_digits];
-
-subplot(2,2,1);
-bar(meanRT); ylabel('mean vissearch RT')
-set(gca,'xticklabels', {'veg1', 'veg2', 'veg3'});
-
-subplot(2,2,2); 
-bar(meanAcc);ylabel('mean vissearch Acc');
-ylim([0 1]);
-set(gca,'xticklabels', {'veg1', 'veg2', 'veg3'});
-
-subplot(2,2,3);
-bar(bothDSB); ylabel('mean DSB (complete)'); 
-set(gca,'xticklabels', {'preDSB', 'postDSB'});
-legend('veg1', 'veg2', 'veg3');
-ylim([0 1])
-
-subplot(2,2,4);
-bar(bothDSB_digits); ylabel('mean DSB (by digits)'); 
-set(gca,'xticklabels', {'preDSB', 'postDSB'});
-legend('veg1', 'veg2', 'veg3');
-ylim([0 1])
 shg
