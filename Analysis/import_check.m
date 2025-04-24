@@ -1,22 +1,27 @@
 % import check - this version ADVICE CONTEXT
 
 
-
+clear all;
+close all;
 jobs=[];
 
 jobs.import_andwrangle = 1; % resaves as matlab tables.
-jobs.extractandStoreperPPant=1; %
 
-% plots:
-jobs.plot_ppPractice=0;
-jobs.plot_ppStaircase =0; % plots dot diff and rolling accuracy per ppant.
-jobs.plot_ppAccandConf_basic=0;
-jobs.plot_ppAgreegmentwithAdvice=0;
+jobs.plot_PP_summary=1;
 
+
+  % cd and import
+  cd('/Users/164376/Documents/GitHub/js_ArtificialDotsAdvice/Analysis/');
+  cd('Raw_data')
+  datadir=pwd;
+
+pfols = dir([pwd filesep 'experiment-data*']);
+disp([num2str(length(pfols)) ', datafiles detected'])
+%%
 if jobs.import_andwrangle==1
 
-
-    for ippant=1
+%%
+    for ippant=1:length(pfols)
         % cd and import
         cd('/Users/164376/Documents/GitHub/js_ArtificialDotsAdvice/Analysis/');
         cd('Raw_data')
@@ -32,10 +37,8 @@ if jobs.import_andwrangle==1
 
 
         % mytab=readtable("experiment-data-MD.csv");
-        mytab=readtable("experiment-data (56).csv");
+        mytab=readtable(pfols(ippant).name);
 
-        % per participant, store relevant data in one structure for later save:
-        PFX_Data= [];
 
         %%  START DATA WRANGLING:
         % 1) delete unnecessary columns
@@ -57,18 +60,384 @@ if jobs.import_andwrangle==1
             end
         end
 
-        %% correct for the bug (no correct_2).
-        allr = find(contains(mytab.stimulus, 'second response'));
+%% %% seems the conversion to matlab struggles when parsing the JSON strings that
+% make the responses to survey data (PRS etc). The data is visible in the
+% CSV, but not mytab.
+
+% Read the CSV file using fopen/textscan for more control
+fid = fopen(pfols(ippant).name);
+
+% Read header line to get column names
+headerLine = fgetl(fid);
+headers = textscan(headerLine, '%s', 'Delimiter', ',');
+headers = headers{1};
+
+% Find the index of the important columns
+responseColIdx = find(contains(headers, 'response'));
+taskColIdx = find(contains(headers, 'task'));
+attnCheckIdx = find(contains(headers, 'attention'));
+% Read the rest of the file as text
+data = textscan(fid, '%s', 'Delimiter', '\n');
+data = data{1};
+fclose(fid);
+%% Process Demographic responses:
+try pp_age=mytab.participant_age(1);
+    pp_gender = mytab.participant_gender(1);
+catch %stored in responses (later versions)
+        disp('ppant age and gender not recovered');
+        pp_age=nan;
+        pp_gender={'nan'};
+end
+
+
+
+
+%% Process PRS-11 Responses: 
+% Initialize variables for DASS-10 q's
+
+prs_table = table();
+%%
+% Initialize output arrays
+numRows = length(data);
+
+% Process each data row
+Attncounter= 0; % increment for Attn checks. 
+Attnperformance= []; % increment for Attn checks. 
+
+for i = 1:numRows
+    % Parse this row (if not empty)
+    if isempty(data{i})
+        disp(['Skipping empty data entry for row ' num2str(i)]);
+    else
+        rowData = textscan(data{i}, '%s', 'Delimiter', ',');
+        rowData = rowData{1};
+        
+
+        %% extract the demographics if it didnt already exist.
+        if any(contains(rowData,'demographics'))
+            
+            %extract data: 
+            startQ= find(contains(rowData, 'age')); % first entry
+            endQ = find(contains(rowData, 'gender')); % first entry
+            for iR = startQ:endQ
+        
+                %extract the number.
+                stringR = rowData{iR};
+                %replace double quotes with singles temporarily:
+                 str_cleaned = strrep(stringR, '""', '''');
+                 % enclose:
+                 str_cleaned = strrep(str_cleaned, '''', '"');
+                 % Now extract all field-value pairs using regular expressions
+                 if contains(str_cleaned, 'gender') 
+                     % pattern should search for two strings:
+                     pattern = '"([^"]+)":"([^"]+)"';                     
+
+                 elseif contains(str_cleaned, 'age'); 
+                     pattern = '{?"([^"]+)":"([^"]+)"';
+                 end
+                 matches = regexp(str_cleaned, pattern, 'tokens');
+
+
+                 % Process each match
+                 for i = 1:length(matches)
+                     field_name = matches{i}{1};   % Field name (e.g., "FA_12")
+                     
+                     if contains(str_cleaned, 'gender') 
+                         value = matches{i}{2};  % string value
+                         pp_gender = value;
+                     elseif contains(str_cleaned, 'age')
+                         value = str2double(matches{i}{2}) ; % Numeric value (e.g., 6)
+                         pp_age = value;
+                     end
+                     
+
+
+                     % store and score
+                     if ischar(value)
+                        % For string values, create a string array column
+                        prs_table.(field_name) = strings(height(prs_table), 1);
+                        prs_table.(field_name)= value;
+                     else
+                        prs_table.(field_name)= value;
+                         
+                     end
+
+                     end
+                 
+
+            end % each response... 
+        end % end demographic extraction:
+
+        %% check if we have attn check on this row: 
+        if any(contains(rowData,'attncheck'))
+        
+            Attncounter=Attncounter+1; 
+
+            % was it correct?
+            if contains(rowData{attnCheckIdx}, 'true');
+                Attnperformance(Attncounter)= 1;
+            else
+                Attnperformance(Attncounter)= 0;
+            end
+            
+        end
+
+        %% Check if this is the dass10 row
+        if  length(rowData)> taskColIdx && any(contains(rowData,'dass10'))
+            
+            % the Q's are always in order, so find the start and end
+            % indices of the PRS questions:
+            startQ= find(contains(rowData, ['felt_panic']));
+            endQ= find(contains(rowData, 'EOL'));
+
+            for iR = startQ:endQ
+        
+                %extract the number.
+                stringR = rowData{iR};
+                %replace double quotes with singles temporarily:
+                 str_cleaned = strrep(stringR, '""', '''');
+                 % enclose:
+                 str_cleaned = strrep(str_cleaned, '''', '"');
+                 % Now extract all field-value pairs using regular expressions
+                 pattern = '"([^"]+)":(\d+)';
+                 matches = regexp(str_cleaned, pattern, 'tokens');
+
+                 % Process each match
+                 for i = 1:length(matches)
+                     field_name = matches{i}{1};   % Field name (e.g., "FA_12")
+                     value = str2double(matches{i}{2});  % Numeric value (e.g., 6)
+
+                     fprintf('Field: %s, Value: %d\n', field_name, value);
+
+
+                     % store and score
+                     prs_table.(['DASS-' field_name])= value;
+                 end
+                 
+
+            end % each response in the DASS
+           
+            
+        end
+
+        %% here we also have the GAAIS  (some pparticipants).
+        if  length(rowData)> taskColIdx && any(contains(rowData,'GAAIS'))
+            
+            % the Q's are actually randomized! , so find the start and end
+            % indices of the PRS questions:
+            startQ= find(contains(rowData, '"{"'));
+            endQ= find(contains(rowData, '}"'));
+
+            for iR = startQ:endQ
+        
+                %extract the number.
+                stringR = rowData{iR};
+                %replace double quotes with singles temporarily:
+                 str_cleaned = strrep(stringR, '""', '''');
+                 % enclose:
+                 str_cleaned = strrep(str_cleaned, '''', '"');
+                 % Now extract all field-value pairs using regular expressions
+                 pattern = '"([^"]+)":(\d+)';
+                 matches = regexp(str_cleaned, pattern, 'tokens');
+
+                 % Process each match
+                 for i = 1:length(matches)
+                     field_name = matches{i}{1};   % Field name (e.g., "FA_12")
+                     value = str2double(matches{i}{2});  % Numeric value (e.g., 6)
+
+                     fprintf('Field: %s, Value: %d\n', field_name, value);
+
+
+                     % store and score
+                     prs_table.(['GAAIS-' field_name])= value;
+                 end
+                 
+
+            end % each response... 
+           
+            
+        end
+    end % empty
+end % each row.
+% we should now have the DASS-10 and GAAIS results compiled.
+
+%% some basic scoring: 
+%https://ebchelp.blueprint.ai/en/articles/9912641-depression-anxiety-and-stress-scale-10-dass-10#h_2f165842c2
+% ~TO DO: DASS-10 scored as follows: 
+% Q'S basically summed togehter, none reverse scored. 
+% 1-felt_panic (A-S)
+% 2-no_initiative (D)
+% 3-felt_blue (D)
+% 4-was_intolerant (A-S)
+% 5-nothing_forward (D)
+% 6-felt_scared (A-S)
+% 7-over_react (A-S)
+% 8-felt_worry (A-S)
+% 9-no_relax (A-S)
+% 10-no_positive (D)
+
+% 11-felt_annoyed
+% 12-EOL_thoughts
+
+%NB not all participants have the DASS:
+if any(contains(prs_table.Properties.VariableNames, 'DASS'))
+    % Depression:
+    depression_subscore = nansum([prs_table.("DASS-no_initiative"),...
+        prs_table.("DASS-nothing_forward"),...)
+        prs_table.("DASS-no_positive")]);
+
+    % Anxiety-Stress:
+    anxstress_subscore =  nansum([prs_table.("DASS-felt_panic"),...
+        prs_table.("DASS-was_intolerant"),...)
+        prs_table.("DASS-felt_scared"),...]);
+        prs_table.("DASS-over_react"),...
+        prs_table.("DASS-felt_worry"),...
+        prs_table.("DASS-no_relax")]);
+
+    % add to table:
+    prs_table.DASS_depression_subscore = depression_subscore;
+    prs_table.DASS_anxstress_subscore = anxstress_subscore;
+
+else% save as NAN.
+prs_table.DASS_depression_subscore = nan;
+prs_table.DASS_anxstress_subscore = nan;
+end
+%% now score the GAAIS: from Shepman & Rodway: https://doi.org/10.1080/10447318.2022.2085400
+%20 item score, with positive and negative components. negative are
+%negativelt scored.
+% 
+% Attncheck
+% to pass, the response must be "4" (for strongly agree).
+
+if any(contains(prs_table.Properties.VariableNames, 'GAAIS'))
+    if prs_table.("GAAIS-A")==4
+        GAAIS_attnpassed= 1;
+    else
+        GAAIS_attnpassed= 0;
+    end
+    
+    %PosAI - scale mean
+    posAI_subscore = nanmean([prs_table.("GAAIS-pos_1"),...
+        prs_table.("GAAIS-pos_2"),...
+        prs_table.("GAAIS-pos_4"),...
+        prs_table.("GAAIS-pos_5"),...
+        prs_table.("GAAIS-pos_7"),...
+        prs_table.("GAAIS-pos_11"),...
+        prs_table.("GAAIS-pos_12"),...
+        prs_table.("GAAIS-pos_13"),...
+        prs_table.("GAAIS-pos_14"),...
+        prs_table.("GAAIS-pos_16"),...
+        prs_table.("GAAIS-pos_17"),...
+        prs_table.("GAAIS-pos_18")]);
+    
+    %negative AI attitudes - scale mean:
+    negAI_subscore = abs(nanmean([prs_table.("GAAIS-neg_3"),...
+        prs_table.("GAAIS-neg_6"),...
+        prs_table.("GAAIS-neg_8"),...
+        prs_table.("GAAIS-neg_9"),...
+        prs_table.("GAAIS-neg_10"),...
+        prs_table.("GAAIS-neg_15"),...
+        prs_table.("GAAIS-neg_19"),...
+        prs_table.("GAAIS-neg_20")]));
+    
+    % add to table
+    prs_table.GAAIS_posAI_subscale= posAI_subscore;
+    prs_table.GAAIS_negAI_subscale= negAI_subscore;
+    prs_table.GAAIS_attnpassed= GAAIS_attnpassed;
+else
+    % add to table
+    prs_table.GAAIS_posAI_subscale= nan;
+    prs_table.GAAIS_negAI_subscale= nan;
+    prs_table.GAAIS_attnpassed= nan;
+end
+
+
+%% now complete the mytab wrangling:
+  %% correct for the bug (no correct_1 or correct_2 - some datasets.).
+        allr1 = find(contains(mytab.stimulus, 'first response'));
+        allr2 = find(contains(mytab.stimulus, 'second response'));
         allnum = find(contains(mytab.stimulus, 'Dot display')); % numerosity (dot) trials
         allconsol = find(contains(mytab.stimulus, 'consolidated'));
-        % first convert all to cell.
-        if ~iscell(mytab.correct_2)
-            % mytab.correct_2= num2cell(mytab.correct_2);
-            mytab.correct_2= mytab.correct_1;
+        
+
+        if ~any(contains(mytab.Properties.VariableNames, 'correct_1'))
+                        
+                disp(['warning! no correct_1 in current table, adding..'])
+                % now for each row, add the correct_1 entry:
+                
+                for itrial = 1:length(allr1) % this is searching all second response.
+                    rowindx = allr1(itrial);
+                    selectedside = mytab.selected_side{rowindx}; %'left', or 'right'
+
+                    % find previous numerosity trial and what was correct.
+                    prevNum = find(contains(mytab.stimulus(1:rowindx), 'Dot display'), 1, "last");
+                    % on that trial, which side had more?
+                    if mytab.leftDots(prevNum) > mytab.rightDots(prevNum)
+                        corside = 'left';
+                    elseif mytab.leftDots(prevNum) < mytab.rightDots(prevNum)
+                        corside = 'right';
+                    else
+                        error(['check data on row indx ' num2str(prevNum)]);
+
+                    end
+
+                    if contains(selectedside,corside);
+                        thiswas  = 'true';
+                    else
+                        thiswas = 'false';
+                    end
+
+                    mytab.correct_1{rowindx}= thiswas;
+                    % also store RT.
+                    mytab.rt_1(rowindx) = str2double(mytab.rt{rowindx});
+
+                    %(converted to binary below)
+
+                    %also update the consolidated row entry:
+                    cindx = find(allconsol>rowindx,1,'first');
+                    crow= allconsol(cindx);
+
+                    %update:
+
+                    mytab.correct_1{crow} =thiswas;
+                    mytab.rt_1(crow) =mytab.rt_1(rowindx);
+
+                end
+
+
+
+            
+            mytab = movevars(mytab, 'correct_1', 'After', 'correct');
+            mytab = movevars(mytab, 'rt_1', 'After', 'correct_1');
+        end
+
+        % some defensive checks to see if the data in correct_2 exists, or
+        % is weird: (unfortunately varies per ppant due to pilotting).
+
+        corr2flag=0;
+        if  ~any(contains(mytab.Properties.VariableNames, 'correct_2'))
+            corr2flag=1;
+        end
+        try allnan= isempty(find(~isnan(mytab.correct_2),1));
+            if allnan
+            corr2flag=1;
+            end
+        catch
+        end
+
+        %
+        if corr2flag==1    
+        % strip if it exists:
+            
+            if any(contains(mytab.Properties.VariableNames, 'correct_2'))
+                mytab.correct_2=[];
+            end
+            
             %% continue with this step only if needed (data-md)
-            for itrial = 1:length(allr)
-                rowindx = allr(itrial);
+            for itrial = 1:length(allr2) % this is searching all second response.
+                rowindx = allr2(itrial);
                 selectedside = mytab.selected_side{rowindx}; %'left', or 'right'
+                
                 % find previous numerosity trial and what was correct.
                 prevNum = find(contains(mytab.stimulus(1:rowindx), 'Dot display'), 1, "last");
                 % on that trial, which side had more?
@@ -88,7 +457,7 @@ if jobs.import_andwrangle==1
                 end
 
                 mytab.correct_2{rowindx}= thiswas;
-
+                mytab.rt_2(rowindx)= str2double(mytab.rt{rowindx});
                 %(converted to binary below)
 
                 %also update the consolidated row entry:
@@ -98,12 +467,14 @@ if jobs.import_andwrangle==1
                 %update:
 
                 mytab.correct_2{crow} =thiswas;
+                mytab.rt_2(crow) =mytab.rt_2(rowindx);
 
             end
         end
 
-
-
+%%
+            mytab = movevars(mytab, 'correct_2', 'After', 'selectedSide_second');
+            mytab = movevars(mytab, 'rt_2', 'After', 'correct_2');
         %% convert to binary most true-false columns:
         forcols ={'correct', 'correct_1', 'adviceCorrect', 'correct_2'};
         for icol=1:length(forcols);
@@ -138,13 +509,13 @@ if jobs.import_andwrangle==1
             userow = consolrows(irow);
             mytab.confidence_first(userow) = mytab.confidence_first(userow)-50;
             mytab.confidence_second(userow) = mytab.confidence_second(userow)-50;
-            % adjust to be - for left, + for right.
-            if contains(mytab.selectedSide_first(userow),'left');
-                mytab.confidence_first(userow) = mytab.confidence_first(userow)*-1;
-            end
-            if contains(mytab.selectedSide_second(userow),'left');
-                mytab.confidence_second(userow) = mytab.confidence_second(userow)*-1;
-            end
+            % adjust to be - for left, + for right?
+            % if contains(mytab.selectedSide_first(userow),'left');
+            %     mytab.confidence_first(userow) = mytab.confidence_first(userow)*-1;
+            % end
+            % if contains(mytab.selectedSide_second(userow),'left');
+            %     mytab.confidence_second(userow) = mytab.confidence_second(userow)*-1;
+            % end
 
         end
 
@@ -186,41 +557,22 @@ if jobs.import_andwrangle==1
         mytab.confChange_z = confChange;
         mytab = movevars(mytab, 'confChange_z', 'After', 'confidence_second_z');
 
+
+        % also include whether this change in confidence is consistent with
+        % decision?? 
+
         %%
-        %% DASS calc:
-        dassrow = find(contains(mytab.task, 'dass10'));
-        DASSresponses = mytab.response{dassrow};
-        %Note the DASS output is a string, with embedded shorthand keys for question ID.
-        % questions shorthands are:
-        % felt_panic
-        % no_initiative
-        % felt_blue
-        % was_intolerant
-        % nothing_forward
-        % felt_scared
-        % over_react
-        % felt_worry
-        % no_relax
-        % no_positive
-        % felt_annoyed
-        % EOL_thoughts
-        % D, A, S = Depression, Anxiety, Stress items. * = reverse scored.
+      
 
-        % for each key, find the response (Likert score 1,2,3,4: Never, Sometimes, Often, Almost Always)
-
-
-
-        %% GAAIS calc
-        gaaisrow = find(contains(mytab.task, 'GAAIS'));
-        GAAISresponses = mytab.response{dassrow};
-
-
-
-        %% SAVE 
+%% SAVE 
         disp('saving grand participant table')...
         % with mytab now clean, lets save for reuse: 
-        save(['Participant_' pnum], 'mytab', '-append');
-        %%
+        save(['Participant_' pnum], 'mytab', ...
+            'prs_table', ...
+            'Attncounter', ...
+            'Attnperformance', 'pnum');
+
+        
         
         %% now for condensed data from the experiment.
         disp('creating condensed participant data table...')
@@ -235,6 +587,10 @@ if jobs.import_andwrangle==1
             'trial_index',...
             'participant_age',...
             'participant_gender',...
+            'correct_binary',... % not in ctable
+            'attention_check_correct',...
+            'target_button', ...
+            'question_order',...
             'rt',...
             'stimulus',...
             'response',...
@@ -261,22 +617,43 @@ if jobs.import_andwrangle==1
         % choice selected from the previous '1' (and advice direction).
 
         % change adviceChoice to nan for adviceConds 2,3.
-        % change adviceDir to nan for adviceCOnd 3
+        % change adviceCorrect to nan for adviceConds 2,3.
+        % change adviceDir to nan for adviceCond 3 (no advice)
 
         for itrial= 1:height(ctable)
+            
+            % if they didnt choose to see advice, adjust table:
+            if ctable.adviceCond(itrial)==1 && contains(ctable.adviceChoice{itrial}, 'no');
+                % if they didnt choose to see advice, adjust table:
+                ctable.adviceDir{itrial}= 'none';
+                ctable.adviceCongruent(itrial)= nan;
+                ctable.adviceCorrect{itrial}= 'nan';
+
+            end
+            % if it was a forced choice trial (2), or no advice trial (3)
             if ctable.adviceCond(itrial)>1
                 ctable.adviceChoice{itrial}='NaN'; % text to make string search easier
-            elseif ctable.adviceCond(itrial)==3
-                ctable.adviceDir(itrial)= 'NaN';
+                % extra step:
+                if ctable.adviceCond(itrial)==3   %(no advice)  
+                    ctable.adviceDir{itrial}= 'none';
+                    ctable.adviceCorrect{itrial}= 'nan';
+                    ctable.adviceCongruent(itrial)= nan;
+                end
             end
         end
-
-        %% include a column for whether advice was congruent with decision 1.
+        %% now correct the binary columns based on advice:
+        
+        nanrows = find(contains(ctable.adviceCorrect, 'nan'));
+        ctable.adviceCorrect_binary(nanrows)=nan;
+    %% include a column for whether advice was congruent with decision 1.
         adviceCongr=[];
-        for itrial= 1:height(ctable);
+        for itrial= 1:height(ctable)
             dir1 = ctable.selectedSide_first(itrial);
 
-            if contains(ctable.adviceDir(itrial),dir1);
+            if contains(ctable.adviceDir(itrial), 'none');
+                adviceCongr(itrial,1)=nan;
+            
+            elseif contains(ctable.adviceDir(itrial),dir1);
                 adviceCongr(itrial,1)=1;
             else
                 adviceCongr(itrial,1)=0;
@@ -286,6 +663,7 @@ if jobs.import_andwrangle==1
         ctable.adviceCongruent = adviceCongr;
         ctable= movevars(ctable, 'adviceCongruent', 'After', 'adviceDir');
 
+        
         %%  include integer (1,2) for left and right to make data processing easier.
         tmp=nan;
         lr= find(contains(ctable.selectedSide_first,'left'));
@@ -303,6 +681,34 @@ if jobs.import_andwrangle==1
         tmp(rr,1) = 2;
         ctable.selectedSide_int_second = tmp;
         ctable= movevars(ctable, 'selectedSide_int_second', 'After', 'selectedSide_second');
+
+%% now we can reclassify the change in confidence, based on whether 
+% the direction of the original decision. 
+% e.g. (+) for increased conf in original decision
+% e.g. (-) for decreased conf in original decision
+
+%pseudo:
+%- find all advice offered trials
+%- for 'left' on decision 1, multiply by -1
+
+%
+allconfchange_z = ctable.confChange_z;
+%when was the first decision on left?
+left1decision = find(contains(ctable.selectedSide_first, 'left')); 
+% for all these ros, a negative change in confidence is an increase in
+% decision. and vice versa. 
+allconfchange_z(left1decision) = allconfchange_z(left1decision).*-1 ;
+%inlcude in table. 
+ctable.confChangevsFirst_z=  allconfchange_z;
+ctable= movevars(ctable, 'confChangevsFirst_z', 'After', 'confChange_z');
+
+
+%% similarly, include a change of mind column.
+firstSide = ctable.selectedSide_first;
+secondSide = ctable.selectedSide_second;
+COM = strcmp(firstSide,secondSide);
+ctable.changeOfMind = abs(COM-1); % since 1 was a match.
+ctable= movevars(ctable, 'changeOfMind', 'After', 'confChangevsFirst_z');
         %% now we can confirm basic stats:
         % staircase first (total exp). convert correct_1 to binary:
         % convert to binary:
@@ -334,55 +740,297 @@ if jobs.import_andwrangle==1
         % with mytab now clean, lets save for reuse: 
         save(['Participant_' pnum], 'ctable', '-append');
 
+ %% also prep a participant data structure for easy ouput later.
+    % things we want to save include: 
+    % demographics, survey results, attn check performance. etc
+    % propY selected (total)
+
+    % Accuracy on C1 (total)
+    % Accuracy on C2 (total)
+    
+    % then various DVs we can split by subgrops:
+    % Acc on C1
+    % RT on C1 
+    % Conf on C1
+    
+    % Acc on C2
+    % RT on C2 
+    % Conf on C2 
+       
+    % Change in Conf (relative to first decision)    
+    
+    ParticipantData=[];
+    
+    %% First, extract demongraphcis and survey responses:
+    ParticipantData.pp_Age= pp_age;
+    ParticipantData.pp_gender= {pp_gender};
+
+    % add DASS subscores here.
+    ParticipantData.DASS_depression= prs_table.DASS_depression_subscore;
+    ParticipantData.DASS_anx= prs_table.DASS_anxstress_subscore;
+
+    %GAAIS:
+    ParticipantData.GAAIS_attnPassed= prs_table.GAAIS_attnpassed;
+    ParticipantData.GAAIS_posAI= prs_table.GAAIS_posAI_subscale;  
+    ParticipantData.GAAIS_negAI= prs_table.GAAIS_negAI_subscale;
+
+    % how many attn checks in exp?
+    ParticipantData.pp_AttnPerformance= mean(Attnperformance);
+    ParticipantData.pp_nAttnChecks= length(Attnperformance);
+    
+    % also calculate overall likelihood of seeing advice:
+    %prop selected
+        choiceTrials= find(ctable.adviceCond==1);
+        choices = ctable.adviceChoice(choiceTrials);
+        choseY = find(contains(choices, 'yes'));        
+        propY= length(choseY)/length(choiceTrials);
+    
+    ParticipantData.proportionYesSelected = propY;
+
+%%
+    %overall performance?
+    ParticipantData.choice1_accuracy = nanmean(ctable.correct_1_binary);
+    ParticipantData.choice2_accuracy = nanmean(ctable.correct_2_binary);
+    
+    
+    %next we will split various DVs by subgroups:
+    
+    %create trial lists for data aggregation:
+    
+    correct_first= find(ctable.correct_1_binary==1);
+    error_first= find(ctable.correct_1_binary==0);
+    
+    correct_second = find(ctable.correct_2_binary==1);
+    error_second = find(ctable.correct_2_binary==0);
+        
+    choiceY_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'yes')));
+    choiceN_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'no')));
+    forced_idx = find(ctable.adviceCond==2);
+    noAdv_idx = find(ctable.adviceCond==3);
+
+    %check indexing:
+    advCongruent = find(ctable.adviceCongruent==1);
+    advIncongruent = find(ctable.adviceCongruent==0);
+
+    % advice x congruence with c1 
+    choiceY_congr = intersect(choiceY_idx, advCongruent );
+    choiceY_incongr = intersect(choiceY_idx, advIncongruent );
+    
+    forced_congr = intersect(forced_idx, advCongruent);
+    forced_incongr = intersect(forced_idx, advIncongruent); 
+
+
+    searchList = {correct_first,error_first,...
+        correct_second, error_second,...
+        choiceY_idx, choiceN_idx, forced_idx, noAdv_idx,...
+        advCongruent, advIncongruent, ...
+        choiceY_congr, choiceY_incongr,...
+        forced_congr, forced_incongr};
+
+    %%
+    % create descriptors for the field names/ columns. 
+    flist ={'correct_first', 'error_first',...
+        'correct_second','error_second',...
+        'choseYesAdvice','choseNoAdvice','forcedYesAdvice','NoAdvice',...}
+        'allAdviceCongruent','allAdviceIncongruent',...}
+        'choseYesAdvice_Congr', 'choseYesAdvice_Incongr',...
+        'forcedYesAdvice_Congr', 'forcedYesAdvice_Incongr'};
+        
+
+
+    for ilist = 1:length(searchList)
+        currlist = searchList{ilist};
+        currLabel = flist{ilist};
+
+%First store the data for choice 1: 
+%Acc,RT,conf on first choice:
+ParticipantData.(['choice1_accuracy_' currLabel ]) = nanmean(ctable.correct_1_binary(currlist));
+ParticipantData.(['choice1_rt_' currLabel ]) = nanmean(ctable.rt_1(currlist));
+ParticipantData.(['choice1_abs_conf_' currLabel ]) = nanmean(abs(ctable.confidence_first_z(currlist)));
+
+%Acc,RT,conf on second choice:
+ParticipantData.(['choice2_accuracy_' currLabel ]) = nanmean(ctable.correct_2_binary(currlist));
+ParticipantData.(['choice2_rt_' currLabel ]) = nanmean(ctable.rt_2(currlist));
+ParticipantData.(['choice2_abs_conf_' currLabel ]) = nanmean(abs(ctable.confidence_second_z(currlist)));
+
+%changes in CONF:
+ParticipantData.(['confChange_abs_z_' currLabel]) = nanmean(ctable.confChangevsFirst_z(currlist)); % dont take absolute, because here the sign has meaning
+% COM likelihood:
+ntotal = length(currlist);
+nhappened = nansum(ctable.changeOfMind(currlist));
+ParticipantData.(['changeOfMind_prop_' currLabel]) = nhappened/ntotal;
+
+    end
+
+    % include demographics, attention checks, and survey responses: 
+    %%
+% save processed data:
+    save(['Participant_' pnum], 'ParticipantData', '-append');
+
     
     end  % per ppant
 end % job import and wrangle
 
 
-if jobs.extractandStoreperPPant==1
-% here we will extract the information we need for later inferential
-% statistics at the group level: 
-%% List to save, wrangle towards this:
-    %% some descriptives:
-    % age, gender,
-    % DASS scores (D,A, S)
-    % GAAIS scores (?)
-    % Attntion checks shown
-    % Attntion checks passed
-    % Exp Duration
-
-    %% Participant output:
-    % Total first Choice Accuracy
-    % Total second Choice Accuracy
-    % Total advice Accuracy
-    % First choice Confidence correct
-    % First choice Confidence error
-    % First choice Confidence correct, Z
-    % First choice Confidence error, Z
+%% Participant level plots:
 
 
- %% accuracy when advice congr/not
-        congrtrials = find(ctable.adviceCongruent==1);
-        incongrtrials = find(ctable.adviceCongruent==0);
+if jobs.plot_PP_summary
+    
+%% summary can be a single figure, 
+cd(datadir)
+ppantfols = dir([pwd filesep 'Participant_*']);
+%%
+
+for ippant=1:length(pfols);
+cd(datadir)
+load(ppantfols(ippant).name);
+
+set(gcf,'color','w', 'units','normalized','position', [0 0 1 1]); clf
+shg
+%
+
+%% first subplot, overall performance on C1 and C2.
+totalAcc= [ParticipantData.choice1_accuracy, ParticipantData.choice2_accuracy];
+subplot(3,3,1);
+bar(1:2, totalAcc);
+title('Total Accuracy')
+ylabel('Proportion correct');
+set(gca,'XTickLabels', {'first choice', 'second choice'}, 'fontsize', 15);
+
+%% next the RTs when Correct and Error, for first and second (combined?)
+dataRT = [ParticipantData.choice1_rt_correct_first,ParticipantData.choice1_rt_error_first];
+subplot(3,3,2);
+bar(1, dataRT);
+title('First choice RT')
+legend({'correct', 'error'})
+ylabel('ms');
+set(gca,'XTickLabels', {'first choice'}, 'fontsize', 15);
+
+%% conf on first choice
+
+dataConf = [ParticipantData.choice1_abs_conf_correct_first,ParticipantData.choice1_abs_conf_error_first];
+subplot(3,3,3);
+bar(1, dataConf);
+title('First choice Conf ')
+legend({'correct', 'error'})
+ylabel('zscored Conf');
+set(gca,'XTickLabels', {'first choice'}, 'fontsize', 15);
+%% Final Accuracy by advice:
+DVsare = {'choice2_accuracy_', 'confChange_abs_z_', 'changeOfMind_prop_'};
+titlesare= {'Final Accuracy', 'Change in Confidence', 'Changes of mind'};
+ylabelsare= {'Proportion correct', 'zscored Conf', 'COM prop.'};
+
+adviceLabels= {'choseYesAdvice','choseNoAdvice', 'forcedYesAdvice','NoAdvice'};
+for iDV= 1:length(DVsare)
+
+dataAdv = [ParticipantData.([DVsare{iDV} 'choseYesAdvice']),...
+    ParticipantData.([DVsare{iDV} 'choseNoAdvice']),...
+    ParticipantData.([DVsare{iDV} 'forcedYesAdvice']),...
+    ParticipantData.([DVsare{iDV}  'NoAdvice'])];
 
 
+subplot(3,3,iDV+3);
+bar(1:length(dataAdv), dataAdv);
+title(titlesare{iDV})
+ylabel(ylabelsare{iDV});
+set(gca,'fontsize', 15, 'XtickLabel', adviceLabels);
+end
 
-        accData = [nansum(ctable.correct_2binary(congrtrials))./length(congrtrials),...
-            nansum(ctable.correct_2binary(incongrtrials))./length(incongrtrials)];
+%% now split by congruent or not?
+adviceLabels= {'choseYes','forcedYes'};
+for iDV= 1:length(DVsare)
 
-        % what is the confidence change when congruent?
-        % we can use the change in Zscores:
-        confChange = ctable.confidence_second_z - ctable.confidence_first_z;
-
-        confData = [nansum(confChange(congrtrials))/length(congrtrials),...
-            nansum(confChange(incongrtrials))/length(incongrtrials)]
+dataAdv = [ParticipantData.([DVsare{iDV} 'choseYesAdvice_Congr']),...
+    ParticipantData.([DVsare{iDV} 'forcedYesAdvice_Congr']);...
+    ParticipantData.([DVsare{iDV} 'choseYesAdvice_Incongr']),...
+    ParticipantData.([DVsare{iDV}  'forcedYesAdvice_Incongr'])];
 
 
+subplot(3,3,iDV+6);
+bar(1:2, dataAdv);
+title(titlesare{iDV})
+ylabel(ylabelsare{iDV});
+set(gca,'fontsize', 15, 'XtickLabel', adviceLabels);
+end
+
+
+%%
+cd(datadir)
+cd ../Figures
+
+print('-dpng', ['Participant_' pnum '_summary'])
 
 end
 
-%% Participant level plots:
-%% if
+end
+
+if jobs.createGFX_table
+   %% 
+   cd(datadir)
+    
+
+    ppantfols = dir([pwd filesep 'Participant_*']);
+%%
+    GFX_table=[];
+
+for ippant=1:length(pfols);
+cd(datadir)
+load(ppantfols(ippant).name);
+%conver tto table and append. 
+ptable = struct2table(ParticipantData);
+
+% remove the attn checls
+if ippant==1
+    GFX_table = ptable;
+else
+    GFX_table= [GFX_table; ptable];
+end
+
+    
+end % end ppant
+
+% here also add some ppants (random) based on jitter.
+% thinking mean +- SD
+
+nCreate = 10; 
+
+for idata= 1:nCreate
+% take the average of real (per field), and then add some jitter.
+    
+    pnew= table(); % new per ppant.
+    vrnames = ptable.Properties.VariableNames;
+    for ifield = 1:length(vrnames);
+        if ifield~=2 % avoid the gender column.
+        tmpd= nanmean(GFX_table.([vrnames{ifield}]));
+        %lowerbound: a
+    a = tmpd - 2*nanstd(GFX_table.([vrnames{ifield}]));
+    % upper bound: b
+    b = tmpd + 2*nanstd(GFX_table.([vrnames{ifield}]));
+
+    %generate singly number between range (a - b)
+    % Generate a single random number
+    random_value = a + (b-a) * rand();
+        else
+            random_value = nan;
+        end
+    % add this jittered value (somewhere within -2SD + 2SD of mean), to
+    % table:
+    pnew.([vrnames{ifield}]) = random_value;
+    
+    end
+
+    % now add to GFXtable:
+    GFX_table = [GFX_table; pnew];
+
+end
+
+%% export
+writetable(GFX_table, 'GFX_table_Pseudo.csv')
+
+end
+
+%%%%%%%
 if jobs.plot_ppPractice ==1
         
     %% first sanity check, staircase performance during practice
@@ -416,6 +1064,7 @@ if jobs.plot_ppPractice ==1
         title('Practice')
         shg
 end
+%%
 if jobs.plot_ppStaircase==1
      %% plot dot diff and staircase:
 
@@ -604,3 +1253,5 @@ bar(1:2, [mean(conf_chY), mean(conf_chN)]);
 title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
 ylabel('final confidence')
 shg
+
+
