@@ -8,7 +8,10 @@ jobs=[];
 jobs.import_andwrangle = 1; % resaves as matlab tables.
 
 jobs.plot_PP_summary=1;
+jobs.createGFX_table=1;
+nCreate = 10; 
 
+jobs.plotGFX=1;
 
   % cd and import
   cd('/Users/164376/Documents/GitHub/js_ArtificialDotsAdvice/Analysis/');
@@ -880,9 +883,9 @@ if jobs.plot_PP_summary
 %% summary can be a single figure, 
 cd(datadir)
 ppantfols = dir([pwd filesep 'Participant_*']);
-%%
+%
 
-for ippant=1:length(pfols);
+for ippant=1%:length(pfols);
 cd(datadir)
 load(ppantfols(ippant).name);
 
@@ -898,24 +901,24 @@ title('Total Accuracy')
 ylabel('Proportion correct');
 set(gca,'XTickLabels', {'first choice', 'second choice'}, 'fontsize', 15);
 
-%% next the RTs when Correct and Error, for first and second (combined?)
+%% next the RTs when Correct and Error, for first
 dataRT = [ParticipantData.choice1_rt_correct_first,ParticipantData.choice1_rt_error_first];
 subplot(3,3,2);
-bar(1, dataRT);
+bar(1:2, dataRT);
 title('First choice RT')
-legend({'correct', 'error'})
+% legend({'correct', 'error'})
 ylabel('ms');
-set(gca,'XTickLabels', {'first choice'}, 'fontsize', 15);
+set(gca,'XTickLabels', {'correct', 'error'}, 'fontsize', 15);
 
 %% conf on first choice
 
 dataConf = [ParticipantData.choice1_abs_conf_correct_first,ParticipantData.choice1_abs_conf_error_first];
 subplot(3,3,3);
-bar(1, dataConf);
+bar(1:2, dataConf);
 title('First choice Conf ')
-legend({'correct', 'error'})
+% legend({'correct', 'error'})
 ylabel('zscored Conf');
-set(gca,'XTickLabels', {'first choice'}, 'fontsize', 15);
+set(gca,'XTickLabels', {'correct', 'error'}, 'fontsize', 15);
 %% Final Accuracy by advice:
 DVsare = {'choice2_accuracy_', 'confChange_abs_z_', 'changeOfMind_prop_'};
 titlesare= {'Final Accuracy', 'Change in Confidence', 'Changes of mind'};
@@ -951,6 +954,7 @@ subplot(3,3,iDV+6);
 bar(1:2, dataAdv);
 title(titlesare{iDV})
 ylabel(ylabelsare{iDV});
+legend('advice Congruent', 'advice Incogruent')
 set(gca,'fontsize', 15, 'XtickLabel', adviceLabels);
 end
 
@@ -993,6 +997,8 @@ end % end ppant
 % here also add some ppants (random) based on jitter.
 % thinking mean +- SD
 
+GFX_table_Pseudo = GFX_table;
+
 nCreate = 10; 
 
 for idata= 1:nCreate
@@ -1021,237 +1027,341 @@ for idata= 1:nCreate
     end
 
     % now add to GFXtable:
-    GFX_table = [GFX_table; pnew];
+    GFX_table_Pseudo = [GFX_table_Pseudo; pnew];
 
 end
 
 %% export
 writetable(GFX_table, 'GFX_table_Pseudo.csv')
-
+writetable(GFX_table, 'GFX_table.csv')
 end
 
-%%%%%%%
-if jobs.plot_ppPractice ==1
-        
-    %% first sanity check, staircase performance during practice
+%% now that we have the GFX_table, include group level plots.
+if jobs.plotGFX==1
+%% following the format above, nowusing GFX_table:
 
-        exp_startrow = find(contains(mytab.stimulus,'expInstruc'), 1,'last');
-        % only one trial type in practice (confidence_first)
-        conf1_rows= find(contains(mytab.task(1:exp_startrow), 'confidence_first'));
-        %numerosity rows have the dot diff and staircase performance.
-        numer_rows = find(contains(mytab.task(1:exp_startrow) , 'numerosity'));
-        numertab = mytab(numer_rows,:);
-
-        % now plot for sanity check:
-        clf;
-        ntrials = 1:height(numertab);
-        subplot(221);
-        plot(ntrials, numertab.difference)
-        ylabel('dotdifference per trial');
-        title('Practice')
-        shg
-
-        % rolling average
-        estAv = nan(length(ntrials),1);
-        conftab = mytab(conf1_rows,:);
-        for itrial = ntrials
-            estAv(itrial,1)= sum(conftab.correct_binary(1:itrial))/ itrial;
-        end
-        %
-        subplot(222);
-        plot(ntrials, estAv, 'r-o')
-        ylabel('rolling accuracy');
-        title('Practice')
-        shg
-end
-%%
-if jobs.plot_ppStaircase==1
-     %% plot dot diff and staircase:
-
-        clf;
-        ntrials = 1:height(ctable);
-        subplot(221);
-        plot(ntrials, ctable.dotsDiff);
-        ylabel('dotdifference per trial');
-        title('Experiment')
-        shg
-        % each bloc had 15 trials, so mark block start end. 
-        hold on;
-        imark = 15:15:225;
-        for im=  1:length(imark)
-        plot([imark(im), imark(im)], [ylim], 'r:')
-
-        end
-
-        % rolling average
-        [estAv, estAv2] = deal(nan(length(ntrials),1));
-
-        for itrial = ntrials
-            estAv(itrial,1)= nansum(ctable.correct_1binary(1:itrial))/ itrial;
-            estAv2(itrial,1)= nansum(ctable.correct_2binary(1:itrial))/ itrial;
-        end
-
-        %
-        subplot(222);
-        plot(ntrials, estAv, 'b-o'); hold on;
-        plot(ntrials, estAv2, 'r-o'); hold on;
-        ylabel('rolling accuracy');
-        title('Experiment')
-        legend('first resp', 'second');
-        shg
-end
-
-if jobs.plot_ppAccandConf_basic
-    %% what is the total accuracy on c1, then c2 by option?
-        accC1 = sum(ctable.correct_1binary)/ height(ctable);
-        accC2 = sum(ctable.correct_2binary)/ height(ctable);
-
-
-        choiceY_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'yes')));
-        choiceN_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'no')));
-        forced_idx = find(ctable.adviceCond==2);
-        noAdv_idx = find(ctable.adviceCond==3);
-
-        subplot(2,2,3);
-        bar(1:2, [accC1, accC2]);
-        ylabel('Accuract on first and second choice');
-        ylabel('proportion correct');
-        set(gca,'xticklabels', {'first', 'second'});
-        xlabel('response order');
-        ylim([.5 1]);
-
-        %acc per type
-        chY_acc = sum(ctable.correct_2binary(choiceY_idx))/ length(choiceY_idx);
-        chN_acc = sum(ctable.correct_2binary(choiceN_idx))/ length(choiceN_idx);
-        forced_acc= sum(ctable.correct_2binary(forced_idx))/ length(forced_idx);
-        noAdv_acc= sum(ctable.correct_2binary(noAdv_idx))/ length(noAdv_idx);
-
-        subplot(224);
-        bar(1:4, [chY_acc, chN_acc, forced_acc, noAdv_acc]);
-        xlabel('advice condition');
-        ylabel('proportion correct');
-        set(gca,'xticklabels', {'chose Yes', 'chose No', 'forced', 'no advice'})
-        shg
-
-
-        %% does confidence track accuracy?
-        respwas ={'first', 'second'};
-        PFX_Conf=[];
-        PFX_RT=[];
-        for iresp = 1:2
-            corr_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==1);
-            err_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==0);
-
-            % collect responses. - absolute for confidence data.
-            confData = abs(ctable.(['confidence_' respwas{iresp}]));
-
-            rtData= ctable.(['rt_' num2str(iresp)]);
-
-            meanConf = [nanmean(confData(corr_idx)),...
-                nanmean(confData(err_idx))];
-
-            meanRT = [nanmean(rtData(corr_idx)), ...
-                nanmean(rtData(err_idx))];
-
-            PFX_Conf(iresp,1:2) = meanConf;
-            PFX_RT(iresp,1:2) = meanRT;
-        end
-        %%plot
-
-        subplot(2,2,3);
-        bar(PFX_Conf); ylabel('mean confidence')
-        set(gca,'xticklabels', {'first response', 'second response'});
-        legend('correct', 'error', 'Location', 'northoutside')
-
-        subplot(2,2,4);
-        bar(PFX_RT);ylabel('mean RTs');
-        % ylim([0 1]);
-        set(gca,'xticklabels', {'first response', 'second response'});
-        legend('correct', 'error', 'Location', 'northoutside')
-        shg
-end
-
-if jobs.plot_ppAgreegmentwithAdvice    
-%% next figure. plot agreement:
-        % pseudo:
-        % Proportion selected side = advice side (?)
-        % Confidence change (congr vs incongr)
-
-        %prop selected
-        choiceTrials= find(ctable.adviceCond==1);
-        choices = ctable.adviceChoice(choiceTrials);
-        choseY = find(contains(choices, 'yes'));
-        choseN = find(contains(choices, 'no'));
-        propY= length(choseY)/length(choiceTrials);
-        propN= length(choseN)/length(choiceTrials);
-        % initial Confidence for each.
-        conf1onchoice = abs(ctable.confidence_first(choiceTrials))
-        conf_chY = conf1onchoice(choseY);
-        conf_chN = conf1onchoice(choseN);
-        clf;
-        subplot(1,3,1)
-        bar(1, [propY;propN], 'stacked');
-        legend('yes', 'no');
-        ylabel('proportion'); title('would you like advice?')
-
-        subplot(132);
-        bar(1:2, [mean(conf_chY), mean(conf_chN)]);
-        % ylim([50 100]);
-        title('initial confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
-        ylabel('initial confidence')
-
-        % now final confidence for each.
-        conf2onchoice = abs(ctable.confidence_second(choiceTrials));
-        conf_chY = conf2onchoice(choseY);
-        conf_chN = conf2onchoice(choseN);
-
-        subplot(133);
-        bar(1:2, [mean(conf_chY), mean(conf_chN)]);
-        % ylim([50 100]);
-        title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
-        ylabel('final confidence')
-        shg
-end
-%% next figure. plot agreement:
-% pseudo:
-% Proportion selected side = advice side (?)
-% Confidence change (congr vs incongr)
-
-%prop selected
-choiceTrials= find(ctable.adviceCond==1);
-choices = ctable.adviceChoice(choiceTrials);
-choseY = find(contains(choices, 'yes'));
-choseN = find(contains(choices, 'no'));
-propY= length(choseY)/length(choiceTrials);
-propN= length(choseN)/length(choiceTrials);
-% initial Confidence for each.
-conf1onchoice = abs(ctable.confidence_first(choiceTrials));
-conf_chY = conf1onchoice(choseY);
-conf_chN = conf1onchoice(choseN);
-
-
-clf;
-subplot(1,3,1)
-bar(1, [propY;propN], 'stacked');
-legend('yes', 'no');
-ylabel('proportion'); title('would you like advice?')
-
-subplot(132);
-bar(1:2, [mean(conf_chY), mean(conf_chN)]);
-% ylim([50 100]);
-title('initial confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
-ylabel('initial confidence')
-
-% now final confidence for each.
-conf2onchoice = abs(ctable.confidence_second(choiceTrials));
-conf_chY = conf2onchoice(choseY);
-conf_chN = conf2onchoice(choseN);
-
-subplot(133);
-bar(1:2, [mean(conf_chY), mean(conf_chN)]);
-% ylim([50 100]);
-title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
-ylabel('final confidence')
+set(gcf,'color','w', 'units','normalized','position', [0 0 1 1]); clf
 shg
+%
+
+%% first subplot, overall performance on C1 and C2.
+totalAcc= [GFX_table.choice1_accuracy, GFX_table.choice2_accuracy];
+subplot(3,3,1);
+bar(1:2, mean(totalAcc,1));
+hold on;
+errorbar(1:2,mean(totalAcc,1), CousineauSEM(totalAcc), 'color','k','LineWidth',2, 'LineStyle','none')
+
+title('Total Accuracy')
+ylabel('Proportion correct');
+set(gca,'XTickLabels', {'first choice', 'second choice'}, 'fontsize', 15);
+
+%% next the RTs when Correct and Error, for first and second (combined?)
+dataRT = [GFX_table.choice1_rt_correct_first,GFX_table.choice1_rt_error_first];
 
 
+subplot(3,3,2);
+bar(1:2, nanmean(dataRT,1));
+hold on;
+errorbar(1:2,nanmean(dataRT,1), CousineauSEM(dataRT), 'color','k','LineWidth',2, 'LineStyle','none')
+title('First choice RT')
+% legend({'correct', 'error'})
+ylabel('ms');
+set(gca,'XTickLabels', {'correct', 'error'}, 'fontsize', 15);
+
+%% conf on first choice
+
+dataConf = [GFX_table.choice1_abs_conf_correct_first,GFX_table.choice1_abs_conf_error_first];
+subplot(3,3,3); cla
+bar(1:2, mean(dataConf)); 
+hold on;
+
+errorbar(1:2, mean(dataConf,1), CousineauSEM(dataConf), 'color','k','LineWidth',2, 'LineStyle','none')
+
+title('First choice Conf ')
+ylabel('zscored Conf');
+set(gca,'XTickLabels', {'correct', 'error'}, 'fontsize', 15);
+%% Final Accuracy by advice:
+DVsare = {'choice2_accuracy_', 'confChange_abs_z_', 'changeOfMind_prop_'};
+titlesare= {'Final Accuracy', 'Change in Confidence', 'Changes of mind'};
+ylabelsare= {'Proportion correct', 'zscored Conf', 'COM prop.'};
+
+adviceLabels= {'choseYesAdvice','choseNoAdvice', 'forcedYesAdvice','NoAdvice'};
+for iDV= 1:length(DVsare)
+
+dataAdv = [GFX_table.([DVsare{iDV} 'choseYesAdvice']),...
+    GFX_table.([DVsare{iDV} 'choseNoAdvice']),...
+    GFX_table.([DVsare{iDV} 'forcedYesAdvice']),...
+    GFX_table.([DVsare{iDV}  'NoAdvice'])];
+
+
+subplot(3,3,iDV+3);
+bar(1:size(dataAdv,2), nanmean(dataAdv,1));
+hold on;
+errorbar(1:size(dataAdv,2),nanmean(dataAdv,1), CousineauSEM(dataAdv), 'color','k','LineWidth',2, 'LineStyle','none')
+% errorbar_groupedfit(mean(dataAdv,1), CousineauSEM(dataAdv));
+title(titlesare{iDV})
+
+ylabel(ylabelsare{iDV});
+set(gca,'fontsize', 15, 'XtickLabel', adviceLabels);
+end
+
+%% now split by congruent or not?
+adviceLabels= {'choseYes','forcedYes'};
+for iDV= 1:length(DVsare)
+
+dataAdv = [GFX_table.([DVsare{iDV} 'choseYesAdvice_Congr']),...
+    GFX_table.([DVsare{iDV} 'forcedYesAdvice_Congr']),...
+    GFX_table.([DVsare{iDV} 'choseYesAdvice_Incongr']),...
+    GFX_table.([DVsare{iDV}  'forcedYesAdvice_Incongr'])];
+
+mdata = nanmean(dataAdv,1);
+semdata = CousineauSEM(dataAdv);
+plotmdata= [mdata(1), mdata(2); mdata(2), mdata(4)];
+plotsemdata= [semdata(1), semdata(2); semdata(2), semdata(4)];
+subplot(3,3,iDV+6);
+bar(1:2, plotmdata);
+hold on;
+errorbar_groupedfit(plotmdata, plotsemdata);
+% errorbar(1:2,mean(dataAdv,1), CousineauSEM(dataAdv), 'color','k','LineWidth',2, 'LineStyle','none')
+title(titlesare{iDV})
+ylabel(ylabelsare{iDV});
+legend('advice Congruent', 'advice Incogruent')
+set(gca,'fontsize', 15, 'XtickLabel', adviceLabels);
+end
+
+
+%%
+cd(datadir)
+cd ../Figures
+
+print('-dpng', ['GFX_n=' num2str(nppants) '_summary'])
+
+
+end
+
+% 
+% %%%%%%%
+% if jobs.plot_ppPractice ==1
+% 
+%     %% first sanity check, staircase performance during practice
+% 
+%         exp_startrow = find(contains(mytab.stimulus,'expInstruc'), 1,'last');
+%         % only one trial type in practice (confidence_first)
+%         conf1_rows= find(contains(mytab.task(1:exp_startrow), 'confidence_first'));
+%         %numerosity rows have the dot diff and staircase performance.
+%         numer_rows = find(contains(mytab.task(1:exp_startrow) , 'numerosity'));
+%         numertab = mytab(numer_rows,:);
+% 
+%         % now plot for sanity check:
+%         clf;
+%         ntrials = 1:height(numertab);
+%         subplot(221);
+%         plot(ntrials, numertab.difference)
+%         ylabel('dotdifference per trial');
+%         title('Practice')
+%         shg
+% 
+%         % rolling average
+%         estAv = nan(length(ntrials),1);
+%         conftab = mytab(conf1_rows,:);
+%         for itrial = ntrials
+%             estAv(itrial,1)= sum(conftab.correct_binary(1:itrial))/ itrial;
+%         end
+%         %
+%         subplot(222);
+%         plot(ntrials, estAv, 'r-o')
+%         ylabel('rolling accuracy');
+%         title('Practice')
+%         shg
+% end
+% %%
+% if jobs.plot_ppStaircase==1
+%      %% plot dot diff and staircase:
+% 
+%         clf;
+%         ntrials = 1:height(ctable);
+%         subplot(221);
+%         plot(ntrials, ctable.dotsDiff);
+%         ylabel('dotdifference per trial');
+%         title('Experiment')
+%         shg
+%         % each bloc had 15 trials, so mark block start end. 
+%         hold on;
+%         imark = 15:15:225;
+%         for im=  1:length(imark)
+%         plot([imark(im), imark(im)], [ylim], 'r:')
+% 
+%         end
+% 
+%         % rolling average
+%         [estAv, estAv2] = deal(nan(length(ntrials),1));
+% 
+%         for itrial = ntrials
+%             estAv(itrial,1)= nansum(ctable.correct_1binary(1:itrial))/ itrial;
+%             estAv2(itrial,1)= nansum(ctable.correct_2binary(1:itrial))/ itrial;
+%         end
+% 
+%         %
+%         subplot(222);
+%         plot(ntrials, estAv, 'b-o'); hold on;
+%         plot(ntrials, estAv2, 'r-o'); hold on;
+%         ylabel('rolling accuracy');
+%         title('Experiment')
+%         legend('first resp', 'second');
+%         shg
+% end
+% 
+% if jobs.plot_ppAccandConf_basic
+%     %% what is the total accuracy on c1, then c2 by option?
+%         accC1 = sum(ctable.correct_1binary)/ height(ctable);
+%         accC2 = sum(ctable.correct_2binary)/ height(ctable);
+% 
+% 
+%         choiceY_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'yes')));
+%         choiceN_idx = intersect(find(ctable.adviceCond==1), find(contains(ctable.adviceChoice,'no')));
+%         forced_idx = find(ctable.adviceCond==2);
+%         noAdv_idx = find(ctable.adviceCond==3);
+% 
+%         subplot(2,2,3);
+%         bar(1:2, [accC1, accC2]);
+%         ylabel('Accuract on first and second choice');
+%         ylabel('proportion correct');
+%         set(gca,'xticklabels', {'first', 'second'});
+%         xlabel('response order');
+%         ylim([.5 1]);
+% 
+%         %acc per type
+%         chY_acc = sum(ctable.correct_2binary(choiceY_idx))/ length(choiceY_idx);
+%         chN_acc = sum(ctable.correct_2binary(choiceN_idx))/ length(choiceN_idx);
+%         forced_acc= sum(ctable.correct_2binary(forced_idx))/ length(forced_idx);
+%         noAdv_acc= sum(ctable.correct_2binary(noAdv_idx))/ length(noAdv_idx);
+% 
+%         subplot(224);
+%         bar(1:4, [chY_acc, chN_acc, forced_acc, noAdv_acc]);
+%         xlabel('advice condition');
+%         ylabel('proportion correct');
+%         set(gca,'xticklabels', {'chose Yes', 'chose No', 'forced', 'no advice'})
+%         shg
+% 
+% 
+%         %% does confidence track accuracy?
+%         respwas ={'first', 'second'};
+%         PFX_Conf=[];
+%         PFX_RT=[];
+%         for iresp = 1:2
+%             corr_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==1);
+%             err_idx = find(ctable.(['correct_' num2str(iresp) 'binary'])==0);
+% 
+%             % collect responses. - absolute for confidence data.
+%             confData = abs(ctable.(['confidence_' respwas{iresp}]));
+% 
+%             rtData= ctable.(['rt_' num2str(iresp)]);
+% 
+%             meanConf = [nanmean(confData(corr_idx)),...
+%                 nanmean(confData(err_idx))];
+% 
+%             meanRT = [nanmean(rtData(corr_idx)), ...
+%                 nanmean(rtData(err_idx))];
+% 
+%             PFX_Conf(iresp,1:2) = meanConf;
+%             PFX_RT(iresp,1:2) = meanRT;
+%         end
+%         %%plot
+% 
+%         subplot(2,2,3);
+%         bar(PFX_Conf); ylabel('mean confidence')
+%         set(gca,'xticklabels', {'first response', 'second response'});
+%         legend('correct', 'error', 'Location', 'northoutside')
+% 
+%         subplot(2,2,4);
+%         bar(PFX_RT);ylabel('mean RTs');
+%         % ylim([0 1]);
+%         set(gca,'xticklabels', {'first response', 'second response'});
+%         legend('correct', 'error', 'Location', 'northoutside')
+%         shg
+% end
+% 
+% if jobs.plot_ppAgreegmentwithAdvice    
+% %% next figure. plot agreement:
+%         % pseudo:
+%         % Proportion selected side = advice side (?)
+%         % Confidence change (congr vs incongr)
+% 
+%         %prop selected
+%         choiceTrials= find(ctable.adviceCond==1);
+%         choices = ctable.adviceChoice(choiceTrials);
+%         choseY = find(contains(choices, 'yes'));
+%         choseN = find(contains(choices, 'no'));
+%         propY= length(choseY)/length(choiceTrials);
+%         propN= length(choseN)/length(choiceTrials);
+%         % initial Confidence for each.
+%         conf1onchoice = abs(ctable.confidence_first(choiceTrials))
+%         conf_chY = conf1onchoice(choseY);
+%         conf_chN = conf1onchoice(choseN);
+%         clf;
+%         subplot(1,3,1)
+%         bar(1, [propY;propN], 'stacked');
+%         legend('yes', 'no');
+%         ylabel('proportion'); title('would you like advice?')
+% 
+%         subplot(132);
+%         bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+%         % ylim([50 100]);
+%         title('initial confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+%         ylabel('initial confidence')
+% 
+%         % now final confidence for each.
+%         conf2onchoice = abs(ctable.confidence_second(choiceTrials));
+%         conf_chY = conf2onchoice(choseY);
+%         conf_chN = conf2onchoice(choseN);
+% 
+%         subplot(133);
+%         bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+%         % ylim([50 100]);
+%         title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+%         ylabel('final confidence')
+%         shg
+% end
+% %% next figure. plot agreement:
+% % pseudo:
+% % Proportion selected side = advice side (?)
+% % Confidence change (congr vs incongr)
+% 
+% %prop selected
+% choiceTrials= find(ctable.adviceCond==1);
+% choices = ctable.adviceChoice(choiceTrials);
+% choseY = find(contains(choices, 'yes'));
+% choseN = find(contains(choices, 'no'));
+% propY= length(choseY)/length(choiceTrials);
+% propN= length(choseN)/length(choiceTrials);
+% % initial Confidence for each.
+% conf1onchoice = abs(ctable.confidence_first(choiceTrials));
+% conf_chY = conf1onchoice(choseY);
+% conf_chN = conf1onchoice(choseN);
+% 
+% 
+% clf;
+% subplot(1,3,1)
+% bar(1, [propY;propN], 'stacked');
+% legend('yes', 'no');
+% ylabel('proportion'); title('would you like advice?')
+% 
+% subplot(132);
+% bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+% % ylim([50 100]);
+% title('initial confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+% ylabel('initial confidence')
+% 
+% % now final confidence for each.
+% conf2onchoice = abs(ctable.confidence_second(choiceTrials));
+% conf_chY = conf2onchoice(choseY);
+% conf_chN = conf2onchoice(choseN);
+% 
+% subplot(133);
+% bar(1:2, [mean(conf_chY), mean(conf_chN)]);
+% % ylim([50 100]);
+% title('final confidence'); set(gca,'xticklabels', {'yes', 'no'}); xlabel('Would you like advice?');
+% ylabel('final confidence')
+% shg
+% 
+% 
